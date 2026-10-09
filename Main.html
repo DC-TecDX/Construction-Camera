@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>整備・工事記録写真システム (PCメイン管理画面)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+    
+    body {
+      font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    @media print {
+      body { background-color: #ffffff !important; color: #000000 !important; }
+      header, footer, nav, button, .no-print { display: none !important; }
+      .a4-page-sheet { page-break-after: always; break-after: page; box-shadow: none !important; margin: 0 !important; border: none !important; width: 100% !important; min-height: 100% !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased selection:bg-amber-500 selection:text-slate-950">
+
+  <div id="root"></div>
+
+  <script>
+    window.GAS_APP_URL = "<?= gasAppUrl ?>";
+    window.GAS_RECORD_ID = "<?= recordId ?>";
+    window.GAS_PROJECT_CODE = "<?= projectCode ?>";
+  </script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // カレンダーピッカー
+    const ElegantDatePicker = ({ value, onChange, placeholder = "日付を選択", hasError }) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const containerRef = useRef(null);
+
+      const parseDate = (v) => {
+        if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+          const [y, m, d] = v.split('-').map(Number);
+          return { year: y, month: m - 1, day: d };
+        }
+        const today = new Date();
+        return { year: today.getFullYear(), month: today.getMonth(), day: today.getDate() };
+      };
+
+      const init = parseDate(value);
+      const [viewYear, setViewYear] = useState(init.year);
+      const [viewMonth, setViewMonth] = useState(init.month);
+
+      useEffect(() => {
+        if (isOpen) {
+          const curr = parseDate(value);
+          setViewYear(curr.year);
+          setViewMonth(curr.month);
+        }
+      }, [isOpen, value]);
+
+      useEffect(() => {
+        const handleClickOutside = (e) => {
+          if (containerRef.current && !containerRef.current.contains(e.target)) {
+            setIsOpen(false);
+          }
+        };
+        if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, [isOpen]);
+
+      const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+      const firstDayWeekday = new Date(viewYear, viewMonth, 1).getDay();
+      const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+      const fmt = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+      const handlePrevMonth = (e) => {
+        e.stopPropagation();
+        if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+        else { setViewMonth(viewMonth - 1); }
+      };
+
+      const handleNextMonth = (e) => {
+        e.stopPropagation();
+        if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+        else { setViewMonth(viewMonth + 1); }
+      };
+
+      const cells = [];
+      for (let i = firstDayWeekday - 1; i >= 0; i--) {
+        cells.push({ day: prevMonthDays - i, isCurr: false, offset: -1, key: `p-${i}` });
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        cells.push({ day: d, isCurr: true, offset: 0, key: `c-${d}` });
+      }
+      const rem = (7 - (cells.length % 7)) % 7;
+      for (let n = 1; n <= rem; n++) {
+        cells.push({ day: n, isCurr: false, offset: 1, key: `n-${n}` });
+      }
+
+      const today = new Date();
+      const isToday = (d, isCurr) => isCurr && viewYear === today.getFullYear() && viewMonth === today.getMonth() && d === today.getDate();
+      const isSelected = (d, isCurr) => isCurr && value && fmt(viewYear, viewMonth, d) === value;
+
+      return (
+        <div ref={containerRef} className="relative w-full">
+          <div
+            onClick={() => setIsOpen(!isOpen)}
+            className={`flex items-center w-full bg-slate-900 border ${hasError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 hover:border-amber-400'} rounded-xl px-3.5 py-3 text-sm cursor-pointer transition select-none`}
+          >
+            <span className="text-amber-400 mr-2.5 text-base shrink-0">📅</span>
+            <span className={`grow font-mono-code ${value ? 'text-white font-medium' : 'text-slate-500'}`}>
+              {value ? value.replace(/-/g, ' / ') : placeholder}
+            </span>
+            {value && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onChange(''); }}
+                className="text-slate-500 hover:text-slate-300 px-1 text-xs"
+                title="クリア"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {isOpen && (
+            <div className="absolute top-full left-0 mt-2 z-50 w-80 bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-2xl backdrop-blur-xl text-xs select-none">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2.5">
+                <button type="button" onClick={handlePrevMonth} className="p-1 hover:bg-slate-800 text-slate-300 hover:text-amber-400 rounded text-sm font-bold">＜</button>
+                <div className="whitespace-nowrap font-bold text-sm text-amber-300 px-3 py-1 rounded bg-slate-950 border border-amber-500/40">
+                  {viewYear}年 {String(viewMonth + 1).padStart(2, '0')}月
+                </div>
+                <button type="button" onClick={handleNextMonth} className="p-1 hover:bg-slate-800 text-slate-300 hover:text-amber-400 rounded text-sm font-bold">＞</button>
+              </div>
+
+              <div className="grid grid-cols-7 text-center font-bold text-xs mb-1 py-1 bg-slate-950/60 rounded">
+                <span className="text-rose-400">日</span>
+                <span className="text-slate-400">月</span>
+                <span className="text-slate-400">火</span>
+                <span className="text-slate-400">水</span>
+                <span className="text-slate-400">木</span>
+                <span className="text-slate-400">金</span>
+                <span className="text-sky-400">土</span>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center font-mono-code my-1">
+                {cells.map((c) => {
+                  const sel = isSelected(c.day, c.isCurr);
+                  const tod = isToday(c.day, c.isCurr);
+                  return (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => {
+                        let ty = viewYear;
+                        let tm = viewMonth + c.offset;
+                        if (tm < 0) { tm = 11; ty -= 1; }
+                        else if (tm > 11) { tm = 0; ty += 1; }
+                        onChange(fmt(ty, tm, c.day));
+                        setIsOpen(false);
+                      }}
+                      className={`h-8 w-full rounded-lg text-xs flex items-center justify-center transition ${
+                        sel
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                          : tod
+                          ? 'border border-amber-400 text-amber-300 font-bold bg-amber-950/40'
+                          : c.isCurr
+                          ? 'text-slate-200 hover:bg-slate-800 hover:text-amber-300'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      {c.day}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-800 pt-2.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = new Date();
+                    onChange(fmt(t.getFullYear(), t.getMonth(), t.getDate()));
+                    setIsOpen(false);
+                  }}
+                  className="px-2.5 py-1 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/30 font-bold"
+                >
+                  今日
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 font-medium"
+                >
+                  閉じる
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const generateUniqueProjectCode = () => {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      const rand = Math.floor(Math.random() * 900 + 100);
+      return `PRJ-${y}${m}${d}-${rand}`;
+    };
+
+    const buildCameraLink = (rawUrl, pCode, rId, currentProj, gasExecUrl) => {
+      if (!rawUrl || typeof rawUrl !== 'string') return '';
+      let url = rawUrl.trim();
+      if (url.length < 5 || url.indexOf('userCodeAppPanel') !== -1 || url.startsWith('about:')) return '';
+
+      const isGitHubPages = url.indexOf('github.io') !== -1 || url.indexOf('pages.dev') !== -1 || url.indexOf('vercel.app') !== -1;
+      let cleanBase = url.split('?')[0];
+      if (isGitHubPages) {
+        if (!cleanBase.endsWith('/')) cleanBase += '/';
+      } else {
+        cleanBase = cleanBase.replace(/\/dev(\/|\?.*)?$/, '/exec').replace(/\/+$/, '');
+      }
+
+      const queryParts = [];
+      if (!isGitHubPages) queryParts.push('mode=camera');
+      if (pCode) queryParts.push(`projectCode=${encodeURIComponent(pCode)}`);
+      if (rId) queryParts.push(`recordId=${encodeURIComponent(String(rId))}`);
+
+      if (currentProj) {
+        if (currentProj.projectName) queryParts.push(`projectName=${encodeURIComponent(currentProj.projectName)}`);
+        if (currentProj.contractorName) queryParts.push(`contractor=${encodeURIComponent(currentProj.contractorName)}`);
+        if (currentProj.location) queryParts.push(`location=${encodeURIComponent(currentProj.location)}`);
+        const fullManagerName = [currentProj.managerLastName, currentProj.managerFirstName].filter(Boolean).join(' ');
+        if (fullManagerName) queryParts.push(`manager=${encodeURIComponent(fullManagerName)}`);
+      }
+
+      if (gasExecUrl && isGitHubPages) {
+        let cleanGas = gasExecUrl.trim().replace(/\/dev(\/|\?.*)?$/, '/exec').replace(/\/+$/, '');
+        queryParts.push(`gasUrl=${cleanGas}`);
+      }
+
+      return queryParts.length > 0 ? `${cleanBase}?${queryParts.join('&')}` : cleanBase;
+    };
+
+    const createNewBlankProject = () => ({
+      id: "proj_" + Date.now(),
+      recordId: "",
+      projectCode: generateUniqueProjectCode(),
+      projectName: "",
+      clientName: "",
+      clientHonorific: "御中",
+      facilityName: "",
+      location: "",
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: new Date().toISOString().slice(0, 10),
+      contractorName: "",
+      contractorAddress: "",
+      contractorPhone: "",
+      contractorFax: "",
+      managerLastName: "",
+      managerFirstName: "",
+      witnessLastName: "",
+      witnessFirstName: "",
+      photos: []
+    });
+
+    function MainApp() {
+      const [activeTab, setActiveTab] = useState('project');
+      const [kintoneRecords, setKintoneRecords] = useState([]);
+      const [selectedRecordId, setSelectedRecordId] = useState("");
+      const [project, setProject] = useState(createNewBlankProject);
+
+      const [photos, setPhotos] = useState([]);
+      const [isLoadingKintonePhotos, setIsLoadingKintonePhotos] = useState(false);
+      const [isLoadingKintoneRecords, setIsLoadingKintoneRecords] = useState(false);
+      const [errors, setErrors] = useState({});
+
+      // kintone接続設定（Basic認証情報を含む）
+      const [kintoneConfig, setKintoneConfig] = useState(() => {
+        let conf = {
+          subdomain: "",
+          appId: "204",
+          apiToken: "",
+          useBasicAuth: false,
+          basicAuthUser: "",
+          basicAuthPassword: "",
+          githubPagesUrl: "",
+          gasUrl: (window.GAS_APP_URL && window.GAS_APP_URL.indexOf('script.google.com') !== -1)
+            ? window.GAS_APP_URL
+            : window.location.href.split('?')[0]
+        };
+        try {
+          const saved = localStorage.getItem('PHOTO_SYSTEM_KINTONE_CONFIG');
+          if (saved) conf = { ...conf, ...JSON.parse(saved) };
+        } catch (e) {}
+        return conf;
+      });
+
+      const [showKintoneModal, setShowKintoneModal] = useState(false);
+      const [isExportingPdf, setIsExportingPdf] = useState(false);
+      const [isSavingKintone, setIsSavingKintone] = useState(false);
+      const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+      const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4500);
+      };
+
+      // kintoneから案件レコード一覧を取得
+      const fetchKintoneRecords = (showSuccessToast = false) => {
+        if (!kintoneConfig.subdomain || !kintoneConfig.apiToken) return;
+
+        setIsLoadingKintoneRecords(true);
+
+        const handleSuccess = (records) => {
+          setIsLoadingKintoneRecords(false);
+          if (records && records.length > 0) {
+            setKintoneRecords(records);
+            if (showSuccessToast) {
+              showToast(`✨ kintoneから ${records.length} 件の工事案件を取得しました`);
+            }
+          } else {
+            setKintoneRecords([]);
+            if (showSuccessToast) {
+              showToast("ℹ️ kintoneアプリにレコードが見つかりませんでした。", "info");
+            }
+          }
+        };
+
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          google.script.run
+            .withSuccessHandler(handleSuccess)
+            .withFailureHandler((err) => {
+              setIsLoadingKintoneRecords(false);
+              showToast("⚠️ kintone通信エラー: " + (err.message || err), "error");
+            })
+            .fetchKintoneRecordsList(kintoneConfig);
+        } else {
+          setTimeout(() => setIsLoadingKintoneRecords(false), 300);
+        }
+      };
+
+      // 設定変更時・マウント時に自動フェッチ
+      useEffect(() => {
+        if (kintoneConfig.subdomain && kintoneConfig.apiToken) {
+          fetchKintoneRecords(false);
+        }
+      }, [kintoneConfig.subdomain, kintoneConfig.apiToken, kintoneConfig.useBasicAuth, kintoneConfig.basicAuthUser, kintoneConfig.basicAuthPassword]);
+
+      // 案件セレクター切替
+      const handleSelectRecord = (recId) => {
+        setSelectedRecordId(recId);
+        setErrors({});
+
+        if (!recId || recId === 'NEW_BLANK') {
+          setProject(createNewBlankProject());
+          showToast("✨ 新規案件の登録フォームを用意しました");
+          return;
+        }
+
+        const found = kintoneRecords.find(r => {
+          const id = r.$id ? r.$id.value : (r.Record_number ? r.Record_number.value : "");
+          return String(id) === String(recId);
+        });
+
+        if (found) {
+          const rawManager = found.ManagerName?.value || found.施工責任者?.value || "";
+          const mParts = rawManager.trim().split(/[\s　]+/);
+          const rawClient = found.ClientName?.value || found.発注者?.value || "";
+          const cleanClient = rawClient.replace(/(御中|殿|様)$/, '').trim();
+          let honorific = "御中";
+          if (rawClient.endsWith("殿")) honorific = "殿";
+          if (rawClient.endsWith("様")) honorific = "様";
+
+          setProject({
+            id: "proj_kintone_" + recId,
+            recordId: recId,
+            projectCode: found.ProjectCode?.value || found.工事コード?.value || "",
+            projectName: found.ProjectName?.value || found.工事名?.value || "",
+            clientName: cleanClient,
+            clientHonorific: honorific,
+            facilityName: found.FacilityName?.value || found.対象施設?.value || "",
+            location: found.WorkLocation?.value || found.施工場所?.value || "",
+            startDate: found.StartDate?.value || found.工期自?.value || "",
+            endDate: found.EndDate?.value || found.工期至?.value || "",
+            contractorName: found.ContractorName?.value || found.施工者?.value || "",
+            contractorAddress: found.ContractorAddress?.value || found.住所部署?.value || "",
+            contractorPhone: found.ContractorPhone?.value || found.TEL?.value || "",
+            contractorFax: found.ContractorFax?.value || found.FAX?.value || "",
+            managerLastName: mParts[0] || "",
+            managerFirstName: mParts.slice(1).join(" ") || "",
+            witnessLastName: "",
+            witnessFirstName: "",
+            photos: []
+          });
+
+          showToast(`📂 kintone案件「${found.ProjectName?.value || '選択案件'}」を読み込みました`);
+        }
+      };
+
+      const validateAllFields = () => {
+        const newErrors = {};
+        if (!project.projectCode?.trim()) newErrors.projectCode = "工事コードを入力してください";
+        if (!project.projectName?.trim()) newErrors.projectName = "工事件名を入力してください";
+        if (!project.clientName?.trim()) newErrors.clientName = "発注者名を入力してください";
+        if (!project.facilityName?.trim()) newErrors.facilityName = "対象施設名を入力してください";
+        if (!project.location?.trim()) newErrors.location = "施工場所を入力してください";
+        if (!project.startDate?.trim()) newErrors.startDate = "着工日を選択してください";
+        if (!project.endDate?.trim()) newErrors.endDate = "完工日を選択してください";
+        if (!project.contractorName?.trim()) newErrors.contractorName = "施工会社名を入力してください";
+        if (!project.contractorAddress?.trim()) newErrors.contractorAddress = "所在地 / 部署を入力してください";
+        if (!project.contractorPhone?.trim()) newErrors.contractorPhone = "電話番号を入力してください";
+        if (!project.managerLastName?.trim()) newErrors.managerLastName = "姓を入力してください";
+        if (!project.witnessLastName?.trim()) newErrors.witnessLastName = "姓を入力してください";
+
+        setErrors(newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+          showToast("⚠️ 未入力の必須項目があります。赤枠の項目を確認してください。", "error");
+          return false;
+        }
+        return true;
+      };
+
+      const saveProjectToKintone = async () => {
+        if (!validateAllFields()) return;
+
+        if (!kintoneConfig.subdomain || !kintoneConfig.apiToken) {
+          showToast("⚠️ 右上の「⚙️ 設定」からkintoneサブドメインとAPIトークンを設定してください。", "error");
+          setShowKintoneModal(true);
+          return;
+        }
+
+        setIsSavingKintone(true);
+        const isUpdate = Boolean(project.recordId);
+        showToast(isUpdate ? "☁️ kintoneレコードを更新中..." : "☁️ kintoneへ新規登録中...", "info");
+
+        const fullClientName = project.clientHonorific 
+          ? `${project.clientName.trim()} ${project.clientHonorific}` 
+          : project.clientName.trim();
+
+        const fullManagerName = [project.managerLastName, project.managerFirstName].filter(Boolean).join(' ');
+
+        const payloadProject = {
+          ...project,
+          clientName: fullClientName,
+          managerName: fullManagerName,
+          stamps: {
+            manager: project.managerLastName.trim(),
+            witness: project.witnessLastName.trim()
+          }
+        };
+
+        if (typeof google !== 'undefined' && google.script && google.script.run) {
+          google.script.run
+            .withSuccessHandler((res) => {
+              setIsSavingKintone(false);
+              if (res && (res.recordId || res.id)) {
+                const recId = res.recordId || res.id;
+                const newCode = res.adjustedProjectCode || project.projectCode;
+                setProject(prev => ({ ...prev, recordId: recId, projectCode: newCode }));
+                setSelectedRecordId(String(recId));
+                fetchKintoneRecords(false);
+                showToast(`✨ kintone [レコードID: #${recId}] に正常保存しました！`);
+              } else {
+                showToast("⚠️ kintone保存エラー: " + JSON.stringify(res), "error");
+              }
+            })
+            .withFailureHandler((err) => {
+              setIsSavingKintone(false);
+              showToast("⚠️ GAS実行エラー: " + (err.message || err), "error");
+            })
+            .createProjectRecordInKintone(payloadProject, kintoneConfig);
+        } else {
+          setTimeout(() => {
+            setIsSavingKintone(false);
+            const dummyId = project.recordId || Math.floor(Math.random() * 800 + 100);
+            setProject(prev => ({ ...prev, recordId: dummyId }));
+            setSelectedRecordId(String(dummyId));
+            showToast(`✨ [モック保存] kintone レコード #${dummyId} に保存完了しました`);
+          }, 600);
+        }
+      };
+
+      const handleProceedNext = () => {
+        if (validateAllFields()) {
+          saveProjectToKintone();
+          setActiveTab('capture');
+        }
+      };
+
+      const primaryCameraUrl = kintoneConfig.githubPagesUrl || kintoneConfig.gasUrl;
+      const cameraLink = buildCameraLink(primaryCameraUrl, project.projectCode, project.recordId, project, kintoneConfig.gasUrl);
+      const qrApiUrl = cameraLink ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(cameraLink)}` : '';
+
+      return (
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+          
+          {/* ヘッダー */}
+          <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 px-4 py-3 shadow-md">
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="font-bold text-base sm:text-lg text-white tracking-tight">整備・工事記録写真システム</h1>
+                <p className="text-xs text-slate-400 hidden sm:block">現場写真撮影 ＆ A4工事写真台帳自動生成</p>
+              </div>
+
+              {/* 案件セレクター */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs">
+                  <span className="text-amber-400 font-bold shrink-0">案件:</span>
+                  <select
+                    value={selectedRecordId}
+                    onChange={(e) => handleSelectRecord(e.target.value)}
+                    className="bg-transparent text-white font-medium text-xs outline-none cursor-pointer max-w-[200px] sm:max-w-[280px] truncate"
+                  >
+                    <option value="NEW_BLANK" className="bg-slate-900 text-amber-400 font-bold">
+                      ✨ 新規案件を登録 (入力クリア)
+                    </option>
+                    {kintoneRecords.map((r) => {
+                      const id = r.$id ? r.$id.value : (r.Record_number ? r.Record_number.value : "");
+                      const pCode = r.ProjectCode?.value || r.工事コード?.value || "";
+                      const pName = r.ProjectName?.value || r.工事名?.value || "無題の工事";
+                      return (
+                        <option key={id} value={id} className="bg-slate-900 text-slate-200">
+                          {pCode ? `[${pCode}] ` : ''}{pName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => fetchKintoneRecords(true)}
+                  disabled={isLoadingKintoneRecords}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 p-2 rounded-xl text-xs transition cursor-pointer"
+                  title="kintoneから最新の案件一覧を取得"
+                >
+                  {isLoadingKintoneRecords ? '⏳' : '🔄'}
+                </button>
+
+                <button
+                  onClick={() => setShowKintoneModal(true)}
+                  className="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  ⚙️ 設定
+                </button>
+              </div>
+
+              {/* タブナビゲーション */}
+              <nav className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs sm:text-sm">
+                <button
+                  onClick={() => setActiveTab('project')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-bold transition ${activeTab === 'project' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  1. 工事基本情報
+                </button>
+                <button
+                  onClick={() => setActiveTab('capture')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-bold transition ${activeTab === 'capture' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  2. 現場撮影案内
+                </button>
+                <button
+                  onClick={() => setActiveTab('import')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-bold transition ${activeTab === 'import' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  3. 写真同期・点検
+                </button>
+                <button
+                  onClick={() => setActiveTab('album')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-bold transition ${activeTab === 'album' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  4. A4写真台帳
+                </button>
+              </nav>
+            </div>
+          </header>
+
+          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+            {/* ステップ①：工事基本情報登録 */}
+            {activeTab === 'project' && (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 space-y-6 shadow-2xl">
+                
+                {/* タイトル ＆ アクションバー */}
+                <div className="border-b border-slate-800 pb-4 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2.5 mb-1">
+                      <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                      <h2 className="text-lg sm:text-xl font-bold text-white tracking-wide">
+                        工事基本情報登録
+                      </h2>
+                    </div>
+                    <p className="text-sm text-slate-400">
+                      写真台帳の表紙および電子黒板に反映される情報です。<span className="text-amber-400 font-medium">※すべての項目を入力してください</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {project.recordId ? (
+                      <span className="bg-emerald-950/90 text-emerald-300 border border-emerald-500/50 px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        kintone ID: #{project.recordId}
+                      </span>
+                    ) : (
+                      <span className="bg-slate-800 text-slate-400 border border-slate-700 px-3 py-1 rounded-xl text-xs">
+                        未登録
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={isSavingKintone}
+                      onClick={saveProjectToKintone}
+                      className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition shadow flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>☁️</span>
+                      <span>{isSavingKintone ? "保存中..." : (project.recordId ? "kintoneを更新" : "kintoneに新規保存")}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleProceedNext}
+                      className="bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs sm:text-sm transition shadow-lg shadow-amber-500/20 active:scale-95 flex items-center gap-1.5 border border-amber-300 cursor-pointer"
+                    >
+                      <span>保存して次へ</span>
+                      <span>➔</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* フォーム本体 */}
+                <div className="space-y-6">
+
+                  {/* セクション 1: 工事件名 */}
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
+                    <span className="text-sm font-bold text-amber-300 block border-b border-slate-800 pb-2">
+                      工事件名
+                    </span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                      <div className="md:col-span-4 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm font-medium text-slate-200">
+                            工事コード <span className="text-rose-400">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCode = generateUniqueProjectCode();
+                              setProject(prev => ({ ...prev, projectCode: newCode }));
+                              showToast(`新しい工事コード「${newCode}」を採番しました`);
+                            }}
+                            className="text-xs text-amber-400 hover:text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800 transition"
+                          >
+                            自動採番
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={project.projectCode}
+                          onChange={(e) => setProject({ ...project, projectCode: e.target.value })}
+                          placeholder="例: PRJ-20261011-001"
+                          className={`w-full bg-slate-900 border ${errors.projectCode ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-amber-300 font-mono-code text-sm outline-none transition`}
+                        />
+                        {errors.projectCode && <p className="text-xs text-rose-400">{errors.projectCode}</p>}
+                      </div>
+
+                      <div className="md:col-span-8 space-y-1.5">
+                        <label className="text-sm font-medium text-slate-200 block">
+                          工事件名 <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={project.projectName}
+                          onChange={(e) => setProject({ ...project, projectName: e.target.value })}
+                          placeholder="例: ○○施設 空調機更新・配管改修工事"
+                          className={`w-full bg-slate-900 border ${errors.projectName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white text-sm outline-none transition`}
+                        />
+                        {errors.projectName && <p className="text-xs text-rose-400">{errors.projectName}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* セクション 2: 発注者 ＆ 施工場所情報 */}
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
+                    <span className="text-sm font-bold text-amber-300 block border-b border-slate-800 pb-2">
+                      発注者 ＆ 施工場所
+                    </span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-200 block">
+                          発注者名 <span className="text-rose-400">*</span>
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={project.clientName}
+                            onChange={(e) => setProject({ ...project, clientName: e.target.value })}
+                            placeholder="例: 株式会社○○ 不動産管理部"
+                            className={`flex-1 bg-slate-900 border ${errors.clientName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white text-sm outline-none transition`}
+                          />
+                          <select
+                            value={project.clientHonorific}
+                            onChange={(e) => setProject({ ...project, clientHonorific: e.target.value })}
+                            className="bg-slate-900 border border-slate-800 text-amber-300 rounded-xl px-2.5 py-3 text-sm font-medium outline-none cursor-pointer"
+                          >
+                            <option value="御中">御中</option>
+                            <option value="殿">殿</option>
+                            <option value="様">様</option>
+                            <option value="">なし</option>
+                          </select>
+                        </div>
+                        {errors.clientName && <p className="text-xs text-rose-400">{errors.clientName}</p>}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-200 block">
+                          対象施設名 <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={project.facilityName}
+                          onChange={(e) => setProject({ ...project, facilityName: e.target.value })}
+                          placeholder="例: ○○センタービル 本館"
+                          className={`w-full bg-slate-900 border ${errors.facilityName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white text-sm outline-none transition`}
+                        />
+                        {errors.facilityName && <p className="text-xs text-rose-400">{errors.facilityName}</p>}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-200 block">
+                          施工場所 <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={project.location}
+                          onChange={(e) => setProject({ ...project, location: e.target.value })}
+                          placeholder="例: 東京都千代田区大手町1-2-3 (地下機械室)"
+                          className={`w-full bg-slate-900 border ${errors.location ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white text-sm outline-none transition`}
+                        />
+                        {errors.location && <p className="text-xs text-rose-400">{errors.location}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* セクション 3: 工期 */}
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
+                    <span className="text-sm font-bold text-amber-300 block border-b border-slate-800 pb-2">
+                      工期
+                    </span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-200 block">
+                          着工日 <span className="text-rose-400">*</span>
+                        </label>
+                        <ElegantDatePicker
+                          value={project.startDate}
+                          onChange={(val) => setProject({ ...project, startDate: val })}
+                          placeholder="着工日を選択"
+                          hasError={Boolean(errors.startDate)}
+                        />
+                        {errors.startDate && <p className="text-xs text-rose-400">{errors.startDate}</p>}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-slate-200 block">
+                          完工日 <span className="text-rose-400">*</span>
+                        </label>
+                        <ElegantDatePicker
+                          value={project.endDate}
+                          onChange={(val) => setProject({ ...project, endDate: val })}
+                          placeholder="完工日を選択"
+                          hasError={Boolean(errors.endDate)}
+                        />
+                        {errors.endDate && <p className="text-xs text-rose-400">{errors.endDate}</p>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* セクション 4: 施工者情報 ＆ 認印（カッコなしの端正な見出し） */}
+                  <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
+                    <span className="text-sm font-bold text-amber-300 block border-b border-slate-800 pb-2">
+                      施工者情報 ＆ 認印
+                    </span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                      
+                      <div className="md:col-span-8 space-y-4">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-200 block">
+                            施工会社名 <span className="text-rose-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={project.contractorName}
+                            onChange={(e) => setProject({ ...project, contractorName: e.target.value })}
+                            placeholder="例: ○○建設工業株式会社"
+                            className={`w-full bg-slate-900 border ${errors.contractorName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white text-sm outline-none transition`}
+                          />
+                          {errors.contractorName && <p className="text-xs text-rose-400">{errors.contractorName}</p>}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-200 block">
+                            所在地 / 部署 <span className="text-rose-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={project.contractorAddress}
+                            onChange={(e) => setProject({ ...project, contractorAddress: e.target.value })}
+                            placeholder="例: 東京都中央区日本橋2-1-1 建築工事課"
+                            className={`w-full bg-slate-900 border ${errors.contractorAddress ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white text-sm outline-none transition`}
+                          />
+                          {errors.contractorAddress && <p className="text-xs text-rose-400">{errors.contractorAddress}</p>}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-200 block">
+                              電話番号 <span className="text-rose-400">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={project.contractorPhone}
+                              onChange={(e) => setProject({ ...project, contractorPhone: e.target.value })}
+                              placeholder="例: 03-0000-0000"
+                              className={`w-full bg-slate-900 border ${errors.contractorPhone ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3.5 py-3 text-white font-mono-code text-sm outline-none transition`}
+                            />
+                            {errors.contractorPhone && <p className="text-xs text-rose-400">{errors.contractorPhone}</p>}
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-sm font-medium text-slate-400 block">
+                              FAX番号
+                            </label>
+                            <input
+                              type="text"
+                              value={project.contractorFax}
+                              onChange={(e) => setProject({ ...project, contractorFax: e.target.value })}
+                              placeholder="例: 03-0000-0001"
+                              className="w-full bg-slate-900 border border-slate-800 focus:border-amber-400 rounded-xl px-3.5 py-3 text-white font-mono-code text-sm outline-none transition"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 右側：表紙押印用 認印（カッコなしの端正な見出し） */}
+                      <div className="md:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+                        <span className="text-sm font-bold text-amber-300 block">
+                          表紙押印用 認印
+                        </span>
+
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-200 block">
+                            施工責任者名 <span className="text-rose-400">*</span>
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <input
+                                type="text"
+                                value={project.managerLastName}
+                                onChange={(e) => setProject({ ...project, managerLastName: e.target.value })}
+                                placeholder="姓 (例: 山田)"
+                                className={`w-full bg-slate-950 border ${errors.managerLastName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3 py-2.5 text-white text-sm outline-none transition`}
+                              />
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                value={project.managerFirstName}
+                                onChange={(e) => setProject({ ...project, managerFirstName: e.target.value })}
+                                placeholder="名 (例: 太郎)"
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-xl px-3 py-2.5 text-white text-sm outline-none transition"
+                              />
+                            </div>
+                          </div>
+                          {errors.managerLastName && <p className="text-xs text-rose-400">{errors.managerLastName}</p>}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium text-slate-200 block">
+                            立会者名 <span className="text-rose-400">*</span>
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <input
+                                type="text"
+                                value={project.witnessLastName}
+                                onChange={(e) => setProject({ ...project, witnessLastName: e.target.value })}
+                                placeholder="姓 (例: 佐藤)"
+                                className={`w-full bg-slate-950 border ${errors.witnessLastName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-800 focus:border-amber-400'} rounded-xl px-3 py-2.5 text-white text-sm outline-none transition`}
+                              />
+                            </div>
+                            <div>
+                              <input
+                                type="text"
+                                value={project.witnessFirstName}
+                                onChange={(e) => setProject({ ...project, witnessFirstName: e.target.value })}
+                                placeholder="名 (任意)"
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-xl px-3 py-2.5 text-white text-sm outline-none transition"
+                              />
+                            </div>
+                          </div>
+                          {errors.witnessLastName && <p className="text-xs text-rose-400">{errors.witnessLastName}</p>}
+                        </div>
+
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-around">
+                          <div className="text-center">
+                            <span className="text-xs text-slate-400 block mb-1">責任者印</span>
+                            <div className="w-12 h-12 border-2 border-red-600 rounded-full mx-auto flex items-center justify-center text-red-500 font-bold text-xs transform -rotate-12 select-none shadow-sm">
+                              {project.managerLastName || '責任者'}
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <span className="text-xs text-slate-400 block mb-1">立会者印</span>
+                            <div className="w-12 h-12 border-2 border-red-600 rounded-full mx-auto flex items-center justify-center text-red-500 font-bold text-xs transform rotate-6 select-none shadow-sm">
+                              {project.witnessLastName || '立会'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* 最下部アクションバー */}
+                <div className="pt-2 flex flex-wrap items-center justify-between gap-4 border-t border-slate-800">
+                  <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">✓</span>
+                    <span>kintoneとシームレスに同期されます</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={isSavingKintone}
+                      onClick={saveProjectToKintone}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm transition cursor-pointer"
+                    >
+                      {isSavingKintone ? "通信中..." : "kintoneへ一時保存"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleProceedNext}
+                      className="bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs sm:text-sm transition shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer border border-amber-300"
+                    >
+                      次へ進む ➔
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* ステップ②：現場撮影案内 */}
+            {activeTab === 'capture' && (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6">
+                <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-bold text-amber-400">ステップ②：現場撮影案内</h2>
+                    <p className="text-xs text-slate-400">現場作業員に撮影用QRコードやアクセスリンクを共有します。</p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('import')}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-1.5 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+                  >
+                    次へ：写真同期・点検 ➔
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                  <div className="space-y-4">
+                    <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300">スマホ直接アクセスURL</span>
+                        {kintoneConfig.githubPagesUrl && (
+                          <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded font-bold">
+                            ✓ GitHub Pages連動中
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={cameraLink}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono-code outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(cameraLink);
+                            showToast("撮影URLをクリップボードにコピーしました！");
+                          }}
+                          className="bg-amber-500 text-slate-950 font-bold px-3 py-2 rounded-lg text-xs shrink-0 cursor-pointer"
+                        >
+                          コピー
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs text-slate-300 leading-relaxed">
+                      <span className="font-bold text-amber-400 block">現場での撮影手順</span>
+                      <p>1. 右のQRコードを作業員のスマートフォンカメラで読み取ります。</p>
+                      <p>2. 工事件名や会社名が反映された電子黒板が起動します。</p>
+                      <p>3. 撮影するとkintoneへ写真と黒板項目が自動送信されます。</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800 p-6 rounded-3xl flex flex-col items-center justify-center space-y-3">
+                    <div className="w-52 h-52 bg-white p-3 rounded-2xl flex items-center justify-center shadow-xl border border-slate-700">
+                      {qrApiUrl ? (
+                        <img src={qrApiUrl} alt="QRコード" className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-xs text-slate-400">URL未設定</span>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-slate-200">
+                      スマホの標準カメラで読み取り
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ステップ③：写真同期・点検 */}
+            {activeTab === 'import' && (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6">
+                <div className="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-amber-400">ステップ③：現場写真の同期・点検</h2>
+                    <p className="text-xs text-slate-400">kintoneからスマホ撮影写真を同期します。</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isLoadingKintonePhotos}
+                      onClick={() => {
+                        if (!project.recordId) {
+                          showToast("先にステップ①で工事情報をkintoneに登録してください。", "error");
+                          return;
+                        }
+                        setIsLoadingKintonePhotos(true);
+                        showToast("kintoneから現場撮影写真を同期中...", "info");
+                        if (typeof google !== 'undefined' && google.script && google.script.run) {
+                          google.script.run
+                            .withSuccessHandler((fetchedPhotos) => {
+                              setIsLoadingKintonePhotos(false);
+                              if (fetchedPhotos && fetchedPhotos.length > 0) {
+                                setPhotos(fetchedPhotos);
+                                showToast(`kintoneから写真 ${fetchedPhotos.length} 枚を同期しました！`);
+                              } else {
+                                showToast("kintoneに撮影写真がまだありません。", "info");
+                              }
+                            })
+                            .withFailureHandler((err) => {
+                              setIsLoadingKintonePhotos(false);
+                              showToast("同期エラー: " + (err.message || err), "error");
+                            })
+                            .fetchProjectPhotosFromKintone(project.recordId, kintoneConfig);
+                        } else {
+                          setTimeout(() => {
+                            setIsLoadingKintonePhotos(false);
+                            showToast("ローカル環境のため同期を完了しました。");
+                          }, 600);
+                        }
+                      }}
+                      className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>🔄</span>
+                      <span>{isLoadingKintonePhotos ? "同期取得中..." : "kintoneから現場写真を同期"}</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('album')}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                    >
+                      次へ：A4台帳出力 ➔
+                    </button>
+                  </div>
+                </div>
+
+                {photos.length === 0 ? (
+                  <div className="bg-slate-950 border border-slate-800 rounded-3xl p-12 text-center text-slate-400 text-xs space-y-3">
+                    <p>写真がまだ読み込まれていません。</p>
+                    <p>現場スマホで撮影後、上の「kintoneから現場写真を同期」を押してください。</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {photos.map((p, idx) => (
+                      <div key={p.id} className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden p-3 space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <span className="bg-amber-500 text-slate-950 font-bold text-[10px] px-2 py-0.5 rounded">
+                            写真 No. {p.photoNo || (idx + 1)}
+                          </span>
+                          <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold text-[10px] px-2 py-0.5 rounded">
+                            {p.constructionStage}
+                          </span>
+                        </div>
+                        <div className="h-44 bg-slate-900 rounded-xl overflow-hidden">
+                          <img src={p.url} alt="写真" className="w-full h-full object-cover" />
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <p className="text-white font-bold truncate">{p.blackboard?.workCategory || '-'}</p>
+                          <p className="text-slate-400 text-[11px] truncate">{p.blackboard?.location || '-'}</p>
+                          <p className="text-slate-500 text-[10px]">{p.timestamp}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ステップ④：A4写真台帳（完成報告書） */}
+            {activeTab === 'album' && (
+              <div className="space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 flex flex-wrap items-center justify-between gap-3 no-print">
+                  <div>
+                    <h2 className="text-base font-bold text-amber-400">ステップ④：A4完成報告書 (工事写真台帳) プレビュー</h2>
+                    <p className="text-xs text-slate-400">1枚目：表紙、2枚目以降：国交省標準仕様（1頁3枚固定・写真55%＋黒板表45%）。</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => window.print()}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+                    >
+                      🖨️ A4直接印刷
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setIsExportingPdf(true);
+                        try {
+                          const { jsPDF } = window.jspdf;
+                          const doc = new jsPDF('p', 'mm', 'a4');
+                          const sheets = document.querySelectorAll('.a4-page-sheet');
+                          if (sheets.length === 0) {
+                            showToast('PDF対象ページが見つかりません。', 'error');
+                            setIsExportingPdf(false);
+                            return;
+                          }
+                          for (let i = 0; i < sheets.length; i++) {
+                            if (i > 0) doc.addPage();
+                            const canvas = await html2canvas(sheets[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+                            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                            doc.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+                          }
+                          doc.save(`${project.projectName || '工事写真台帳'}_完成報告書.pdf`);
+                          showToast('📄 A4高解像度PDFのダウンロードが完了しました！');
+                        } catch (err) {
+                          showToast("PDF生成エラー: " + err.message, 'error');
+                        } finally {
+                          setIsExportingPdf(false);
+                        }
+                      }}
+                      disabled={isExportingPdf}
+                      className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs shadow-lg shadow-amber-500/20 cursor-pointer"
+                    >
+                      {isExportingPdf ? "PDF生成中..." : "📥 A4高解像度PDFダウンロード"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-6 flex flex-col items-center">
+                  {/* 表紙 */}
+                  <div className="a4-page-sheet bg-white text-slate-900 w-[210mm] min-h-[297mm] p-[15mm] shadow-2xl flex flex-col justify-between box-border">
+                    <div className="space-y-8">
+                      <div className="text-center border-b-2 border-slate-900 pb-4">
+                        <h1 className="text-2xl font-bold tracking-widest text-slate-900">整備・工事完了報告書</h1>
+                        <p className="text-xs font-medium text-slate-600 mt-1">（ 工 事 写 真 台 帳 ）</p>
+                      </div>
+
+                      <div className="text-sm font-medium border-b border-slate-400 pb-2 flex justify-between items-end">
+                        <span className="text-lg font-bold">
+                          {project.clientName} {project.clientHonorific}
+                        </span>
+                        <span className="text-xs text-slate-600">提出日: {new Date().toLocaleDateString('ja-JP')}</span>
+                      </div>
+
+                      <table className="w-full border-collapse border border-slate-900 text-xs">
+                        <tbody>
+                          <tr>
+                            <td className="bg-slate-100 border border-slate-900 p-2.5 font-bold w-32">工事件名</td>
+                            <td className="border border-slate-900 p-2.5 font-bold text-sm" colSpan="3">{project.projectName}</td>
+                          </tr>
+                          <tr>
+                            <td className="bg-slate-100 border border-slate-900 p-2.5 font-bold">対象施設名</td>
+                            <td className="border border-slate-900 p-2.5" colSpan="3">{project.facilityName}</td>
+                          </tr>
+                          <tr>
+                            <td className="bg-slate-100 border border-slate-900 p-2.5 font-bold">施工場所</td>
+                            <td className="border border-slate-900 p-2.5" colSpan="3">{project.location}</td>
+                          </tr>
+                          <tr>
+                            <td className="bg-slate-100 border border-slate-900 p-2.5 font-bold">工期</td>
+                            <td className="border border-slate-900 p-2.5 font-medium" colSpan="3">{project.startDate} ～ {project.endDate}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      <div className="border border-slate-900 p-4 rounded space-y-2 text-xs">
+                        <div className="font-bold border-b border-slate-200 pb-1 text-slate-700">【施工業者情報】</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div><span className="font-bold">施工会社名:</span> {project.contractorName}</div>
+                          <div><span className="font-bold">TEL:</span> {project.contractorPhone} {project.contractorFax ? ` / FAX: ${project.contractorFax}` : ''}</div>
+                          <div className="col-span-2"><span className="font-bold">所在地 / 部署:</span> {project.contractorAddress}</div>
+                          <div className="col-span-2">
+                            <span className="font-bold">施工責任者:</span> {[project.managerLastName, project.managerFirstName].filter(Boolean).join(' ')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-8 flex justify-end">
+                      <table className="border-collapse border border-slate-900 text-[10px] text-center w-48">
+                        <thead>
+                          <tr className="bg-slate-100">
+                            <th className="border border-slate-900 py-1 font-bold w-1/2">責任者</th>
+                            <th className="border border-slate-900 py-1 font-bold w-1/2">立会者</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td className="border border-slate-900 h-16 align-middle">
+                              <div className="w-10 h-10 border-2 border-red-600 rounded-full mx-auto flex items-center justify-center text-red-500 font-bold text-xs transform -rotate-12 select-none shadow-sm">
+                                {project.managerLastName || '責任者'}
+                              </div>
+                            </td>
+                            <td className="border border-slate-900 h-16 align-middle">
+                              <div className="w-10 h-10 border-2 border-red-600 rounded-full mx-auto flex items-center justify-center text-red-500 font-bold text-xs transform rotate-6 select-none shadow-sm">
+                                {project.witnessLastName || '立会'}
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 2ページ目以降：写真3枚固定 */}
+                  {Array.from({ length: Math.ceil(photos.length / 3) }).map((_, pageIdx) => {
+                    const pagePhotos = photos.slice(pageIdx * 3, pageIdx * 3 + 3);
+                    return (
+                      <div key={pageIdx} className="a4-page-sheet bg-white text-slate-900 w-[210mm] min-h-[297mm] p-[12mm] shadow-2xl flex flex-col justify-between box-border">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between border-b-2 border-slate-900 pb-1.5 text-xs">
+                            <span className="font-bold text-slate-800">工事写真台帳：{project.projectName}</span>
+                            <span className="font-bold text-slate-600">頁: {pageIdx + 2}</span>
+                          </div>
+
+                          <div className="space-y-3">
+                            {pagePhotos.map((photo, pIndex) => (
+                              <div key={photo.id} className="border border-slate-900 rounded overflow-hidden flex h-[78mm]">
+                                <div className="w-[55%] border-r border-slate-900 flex flex-col bg-slate-50">
+                                  <div className="bg-slate-100 border-b border-slate-300 px-2 py-1 flex items-center justify-between text-[10px]">
+                                    <span className="font-bold text-slate-800">写真 No. {pageIdx * 3 + pIndex + 1}</span>
+                                    <span className="bg-emerald-600 text-white font-bold px-1.5 py-0.5 rounded">{photo.constructionStage}</span>
+                                  </div>
+                                  <div className="flex-1 p-1 flex items-center justify-center overflow-hidden">
+                                    <img src={photo.url} alt="写真" className="max-w-full max-h-full object-contain" />
+                                  </div>
+                                </div>
+
+                                <div className="w-[45%] flex flex-col text-[10px]">
+                                  <table className="w-full border-collapse h-full">
+                                    <tbody>
+                                      <tr>
+                                        <td className="bg-slate-100 border-b border-slate-300 p-1 font-bold w-20">工事件名</td>
+                                        <td className="border-b border-slate-300 p-1 font-medium">{photo.blackboard?.projectName || project.projectName}</td>
+                                      </tr>
+                                      <tr>
+                                        <td className="bg-slate-100 border-b border-slate-300 p-1 font-bold">作業種目</td>
+                                        <td className="border-b border-slate-300 p-1 font-bold">{photo.blackboard?.workCategory || '-'}</td>
+                                      </tr>
+                                      <tr>
+                                        <td className="bg-slate-100 border-b border-slate-300 p-1 font-bold">撮影部位</td>
+                                        <td className="border-b border-slate-300 p-1">{photo.blackboard?.location || '-'}</td>
+                                      </tr>
+                                      <tr>
+                                        <td className="bg-slate-100 border-b border-slate-300 p-1 font-bold">規格・寸法</td>
+                                        <td className="border-b border-slate-300 p-1">{photo.blackboard?.spec || '-'}</td>
+                                      </tr>
+                                      <tr>
+                                        <td className="bg-slate-100 border-b border-slate-300 p-1 font-bold">撮影日時</td>
+                                        <td className="border-b border-slate-300 p-1 font-mono-code">{photo.timestamp || '-'}</td>
+                                      </tr>
+                                      <tr>
+                                        <td className="bg-slate-100 p-1 font-bold align-top">特記事項</td>
+                                        <td className="p-1 align-top font-medium">{photo.blackboard?.notes || '-'}</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="text-center text-[9px] text-slate-500 border-t border-slate-300 pt-1">
+                          整備・工事記録写真システム 自動生成文書
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* ⚙️ kintone ＆ システム設定モーダル（Basic認証設定対応） */}
+          {showKintoneModal && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h3 className="font-bold text-sm text-amber-400">⚙️ システム ＆ kintone接続設定</h3>
+                  <button onClick={() => setShowKintoneModal(false)} className="text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
+                </div>
+
+                <div className="space-y-3.5 text-xs">
+                  <div className="bg-slate-950 p-2.5 rounded-xl border border-amber-500/40 space-y-1">
+                    <label className="block text-amber-300 font-bold">GitHub Pages 公開URL (現場撮影用)</label>
+                    <input
+                      type="text"
+                      placeholder="https://組織名.github.io/field-camera/"
+                      value={kintoneConfig.githubPagesUrl || ''}
+                      onChange={(e) => setKintoneConfig({ ...kintoneConfig, githubPagesUrl: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-mono-code text-[11px] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">cybozu サブドメイン</label>
+                    <input
+                      type="text"
+                      placeholder="例: your-subdomain"
+                      value={kintoneConfig.subdomain}
+                      onChange={(e) => setKintoneConfig({ ...kintoneConfig, subdomain: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono-code"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">kintone アプリID</label>
+                    <input
+                      type="text"
+                      value={kintoneConfig.appId}
+                      onChange={(e) => setKintoneConfig({ ...kintoneConfig, appId: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono-code"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">kintone APIトークン</label>
+                    <input
+                      type="password"
+                      value={kintoneConfig.apiToken}
+                      onChange={(e) => setKintoneConfig({ ...kintoneConfig, apiToken: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono-code"
+                    />
+                  </div>
+
+                  {/* Basic認証設定セクション */}
+                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={kintoneConfig.useBasicAuth || false}
+                        onChange={(e) => setKintoneConfig({ ...kintoneConfig, useBasicAuth: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-950"
+                      />
+                      <span className="text-xs font-bold text-amber-300">🔐 Basic認証を利用する (セキュリティ設定環境)</span>
+                    </label>
+
+                    {kintoneConfig.useBasicAuth && (
+                      <div className="grid grid-cols-2 gap-2 pt-1 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                        <div>
+                          <label className="block text-slate-400 text-[10px] mb-1">Basic認証 ユーザー名</label>
+                          <input
+                            type="text"
+                            placeholder="ユーザー名"
+                            value={kintoneConfig.basicAuthUser || ''}
+                            onChange={(e) => setKintoneConfig({ ...kintoneConfig, basicAuthUser: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white text-xs outline-none font-mono-code"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 text-[10px] mb-1">Basic認証 パスワード</label>
+                          <input
+                            type="password"
+                            placeholder="パスワード"
+                            value={kintoneConfig.basicAuthPassword || ''}
+                            onChange={(e) => setKintoneConfig({ ...kintoneConfig, basicAuthPassword: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-white text-xs outline-none font-mono-code"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 mb-1">GAS WebアプリURL (/exec)</label>
+                    <input
+                      type="text"
+                      value={kintoneConfig.gasUrl}
+                      onChange={(e) => setKintoneConfig({ ...kintoneConfig, gasUrl: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono-code text-[11px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('PHOTO_SYSTEM_KINTONE_CONFIG', JSON.stringify(kintoneConfig));
+                      if (typeof google !== 'undefined' && google.script && google.script.run) {
+                        google.script.run.saveKintoneConfigToProperties(kintoneConfig);
+                      }
+                      setShowKintoneModal(false);
+                      fetchKintoneRecords(true); // 設定保存直後にBasic認証付きで自動一覧同期
+                      showToast("システム設定を保存し、kintone案件一覧を取得しました！");
+                    }}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer"
+                  >
+                    設定を保存して閉じる
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* トースト通知 */}
+          {toast.show && (
+            <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-amber-500/50 text-white px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md text-xs font-bold flex items-center gap-2">
+              <span>{toast.message}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<MainApp />, document.getElementById('root'));
+  </script>
+</body>
+</html>
