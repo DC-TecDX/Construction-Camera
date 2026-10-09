@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>現場写真 電子黒板カメラ (GitHub Pages版)</title>
+  <title>現場写真 電子黒板カメラ (縦持ち最適化版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -43,7 +43,9 @@
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
 
-      // URLパラメータから工事情報とGASのURLを取得
+      // 写真の向き（'landscape': 標準横写真 4:3 | 'portrait': 縦写真 3:4）
+      const [photoOrientation, setPhotoOrientation] = useState('landscape');
+
       const [urlConfig, setUrlConfig] = useState({
         gasUrl: '',
         recordId: '',
@@ -66,7 +68,7 @@
         notes: '同一アングル撮影確認良好',
         date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }),
         style: 'green',
-        scale: 0.38,
+        scale: 0.42,
         opacity: 1.0,
         position: 'bottom-right'
       });
@@ -109,7 +111,7 @@
         }));
       }, []);
 
-      // カメラ起動処理
+      // カメラ起動（解像度数値を固定せず、スマホの自然な画角を取得）
       const startCamera = async (targetFacing = facingMode) => {
         setStreamError(null);
 
@@ -127,7 +129,7 @@
 
         const tryConstraints = [
           { video: { facingMode: targetFacing }, audio: false },
-          { video: { facingMode: { ideal: targetFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+          { video: { facingMode: { ideal: targetFacing } }, audio: false },
           { video: true, audio: false }
         ];
 
@@ -142,7 +144,7 @@
         }
 
         if (!activeStream) {
-          setStreamError('カメラの起動に失敗しました。ブラウザのカメラ許可をご確認ください。');
+          setStreamError('カメラの起動に失敗しました。カメラの利用許可を確認してください。');
           setIsStreaming(false);
           return;
         }
@@ -166,7 +168,6 @@
         }
       };
 
-      // 初回自動起動
       useEffect(() => {
         startCamera(facingMode);
         return () => {
@@ -176,7 +177,7 @@
         };
       }, [facingMode]);
 
-      // ★ここに追加：タブが「撮影」に戻ったときに映像が止まらないよう自動再開する処理
+      // タブ復帰時の映像再保証
       useEffect(() => {
         if (activeTab === 'camera') {
           const video = videoRef.current;
@@ -223,7 +224,7 @@
       const renderBlackboard = useCallback((ctx, w, h) => {
         const boardW = Math.round(w * blackboard.scale);
         const boardH = Math.round(boardW * 0.70);
-        const margin = 20;
+        const margin = 16;
 
         let bx = w - boardW - margin;
         let by = h - boardH - margin;
@@ -313,7 +314,7 @@
         ctx.restore();
       }, [blackboard]);
 
-      // リアルタイム描画ループ
+      // リアルタイム描画ループ（アスペクト比を歪ませずにクロップ合成）
       useEffect(() => {
         const renderLoop = () => {
           const canvas = canvasRef.current;
@@ -322,36 +323,61 @@
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
-          const w = 1280;
-          const h = 720;
-          if (canvas.width !== w) canvas.width = w;
-          if (canvas.height !== h) canvas.height = h;
+          // 国交省標準 4:3（横長: 1200x900）または 3:4（縦長: 900x1200）
+          const isLandscape = (photoOrientation === 'landscape');
+          const canvasW = isLandscape ? 1200 : 900;
+          const canvasH = isLandscape ? 900 : 1200;
 
-          ctx.clearRect(0, 0, w, h);
+          if (canvas.width !== canvasW) canvas.width = canvasW;
+          if (canvas.height !== canvasH) canvas.height = canvasH;
 
-          const isVideoActive = !!(video && video.srcObject && (video.readyState >= 2 || video.currentTime > 0));
+          ctx.clearRect(0, 0, canvasW, canvasH);
+
+          const isVideoActive = !!(video && video.srcObject && video.videoWidth > 0 && video.videoHeight > 0);
 
           if (isVideoActive) {
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+
+            // アスペクト比を保ったままキャンバスいっぱいに中央トリミング（歪み防止）
+            const videoRatio = vw / vh;
+            const canvasRatio = canvasW / canvasH;
+
+            let sx, sy, sWidth, sHeight;
+            if (videoRatio > canvasRatio) {
+              sHeight = vh;
+              sWidth = vh * canvasRatio;
+              sx = (vw - sWidth) / 2;
+              sy = 0;
+            } else {
+              sWidth = vw;
+              sHeight = vw / canvasRatio;
+              sx = 0;
+              sy = (vh - sHeight) / 2;
+            }
+
             try {
               if (facingMode === 'user') {
                 ctx.save();
-                ctx.translate(w, 0);
+                ctx.translate(canvasW, 0);
                 ctx.scale(-1, 1);
-                ctx.drawImage(video, 0, 0, w, h);
+                ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvasW, canvasH);
                 ctx.restore();
               } else {
-                ctx.drawImage(video, 0, 0, w, h);
+                ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, canvasW, canvasH);
               }
             } catch(e) {}
           } else {
-            const grad = ctx.createLinearGradient(0, 0, w, h);
+            const grad = ctx.createLinearGradient(0, 0, canvasW, canvasH);
             grad.addColorStop(0, '#0f172a');
             grad.addColorStop(1, '#020617');
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, w, h);
+            ctx.fillRect(0, 0, canvasW, canvasH);
           }
 
-          renderBlackboard(ctx, w, h);
+          // 電子黒板を合成
+          renderBlackboard(ctx, canvasW, canvasH);
+
           animFrameRef.current = requestAnimationFrame(renderLoop);
         };
 
@@ -359,9 +385,9 @@
         return () => {
           if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
         };
-      }, [isStreaming, facingMode, renderBlackboard]);
+      }, [isStreaming, facingMode, photoOrientation, renderBlackboard]);
 
-      // シャッター撮影 ＆ kintone送信
+      // シャッター撮影
       const handleShutter = async () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -433,7 +459,7 @@
               <span className="text-xs font-black text-white tracking-wide">現場写真 電子黒板カメラ</span>
             </div>
             <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-800/80">
-              {urlConfig.projectCode ? `[${urlConfig.projectCode}]` : 'GitHub Pages版'}
+              {urlConfig.projectCode ? `[${urlConfig.projectCode}]` : '現場モード'}
             </span>
           </header>
 
@@ -465,9 +491,40 @@
           )}
 
           <main className="flex-1 p-3 space-y-3">
-            {/* 📷 撮影タブ（要素を破棄せず hidden で隠すことで漆黒化を完全防止） */}
+            {/* 📷 撮影タブ */}
             <div className={activeTab === 'camera' ? 'space-y-3' : 'hidden'}>
-              <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full aspect-[4/3] flex items-center justify-center shadow-2xl">
+              {/* コントロールバー：写真の比率切替 ＆ カメラ反転 */}
+              <div className="flex items-center justify-between px-1 text-xs">
+                <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setPhotoOrientation('landscape')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${photoOrientation === 'landscape' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                  >
+                    標準 横写真 (4:3)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoOrientation('portrait')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${photoOrientation === 'portrait' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                  >
+                    縦写真 (3:4)
+                  </button>
+                </div>
+
+                {isStreaming && (
+                  <button
+                    type="button"
+                    onClick={handleToggleFacing}
+                    className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-900 text-slate-200 border border-slate-700 shadow"
+                  >
+                    🔄 カメラ反転
+                  </button>
+                )}
+              </div>
+
+              {/* ファインダー表示枠（縦持ちのまま自然な4:3または3:4で歪まず表示） */}
+              <div className={`relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full flex items-center justify-center shadow-2xl transition-all ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
                 <video
                   ref={videoRef}
                   playsInline
@@ -481,7 +538,7 @@
                 {isStreaming && (
                   <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-slate-900/85 px-2.5 py-1 rounded-lg border border-emerald-500/60 shadow">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[10px] text-emerald-300 font-bold">🟢 画角内黒板プレビュー中</span>
+                    <span className="text-[10px] text-emerald-300 font-bold">🟢 黒板プレビュー中</span>
                   </div>
                 )}
 
@@ -501,26 +558,29 @@
                     </button>
                   </div>
                 )}
-
-                {isStreaming && (
-                  <button
-                    type="button"
-                    onClick={handleToggleFacing}
-                    className="absolute top-2 right-2 z-20 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-900/80 text-slate-200 border border-slate-700 backdrop-blur-md"
-                  >
-                    🔄 反転
-                  </button>
-                )}
               </div>
 
-              <button
-                type="button"
-                disabled={isUploading}
-                onClick={handleShutter}
-                className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black py-4 rounded-2xl text-base flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 active:scale-95 transition-all cursor-pointer border border-amber-300"
-              >
-                {isUploading ? <span>⏳ kintone 送信中...</span> : <span>📸 シャッター（kintoneへ送信）</span>}
-              </button>
+              {/* 片手・親指で押しやすい超大型シャッターボタン */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={handleShutter}
+                  className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 active:scale-95 text-slate-950 font-black py-4 rounded-2xl text-lg flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 transition-all cursor-pointer border-2 border-amber-300"
+                >
+                  {isUploading ? (
+                    <span>⏳ kintone 送信中...</span>
+                  ) : (
+                    <>
+                      <span className="text-2xl">📸</span>
+                      <span>シャッターを切る (kintone保存)</span>
+                    </>
+                  )}
+                </button>
+                <p className="text-[10px] text-slate-400 text-center mt-1.5">
+                  ※スマホを縦に持ったまま、標準的な横長工事写真（4:3）として綺麗に撮影されます
+                </p>
+              </div>
             </div>
 
             {/* 📋 黒板設定タブ */}
