@@ -109,7 +109,7 @@
         }));
       }, []);
 
-      // カメラ起動
+// カメラ起動（会社携帯・ミドルレンジ端末ハングアップ完全回避版）
       const startCamera = async (targetFacing = facingMode) => {
         setStreamError(null);
 
@@ -125,48 +125,52 @@
           return;
         }
 
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: { ideal: targetFacing },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false
-          });
+        // 端末によってフリーズしないよう、柔軟な制約順で試行
+        const tryConstraints = [
+          // ① 最も安全：解像度の数値を固定せず、端末ネイティブの背面カメラを要求（会社Android対応）
+          { video: { facingMode: targetFacing }, audio: false },
+          // ② HD理想指定（Pixel等で高品質になる設定）
+          { video: { facingMode: { ideal: targetFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+          // ③ 全制約解除（最後の砦）
+          { video: true, audio: false }
+        ];
 
-          streamRef.current = stream;
-          const video = videoRef.current;
-          if (video) {
-            video.srcObject = stream;
-            video.setAttribute('playsinline', 'true');
-            video.setAttribute('webkit-playsinline', 'true');
-            video.muted = true;
+        let activeStream = null;
+        for (const constraints of tryConstraints) {
+          try {
+            // 3秒以上反応がない場合は強制タイムアウトして次へ行く安全装置
+            activeStream = await Promise.race([
+              navigator.mediaDevices.getUserMedia(constraints),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+            ]);
+            if (activeStream) break;
+          } catch (err) {
+            console.warn('カメラ試行スキップ:', err);
+          }
+        }
+
+        if (!activeStream) {
+          setStreamError('カメラの起動がタイムアウトしました。');
+          setIsStreaming(false);
+          return;
+        }
+
+        streamRef.current = activeStream;
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = activeStream;
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+          video.setAttribute('muted', 'true');
+          video.muted = true;
+
+          try {
             await video.play();
             setIsStreaming(true);
             setStreamError(null);
-          }
-        } catch (err) {
-          console.warn('第1試行失敗、全制約解除で再試行:', err);
-          try {
-            const fallbackStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false
-            });
-            streamRef.current = fallbackStream;
-            const video = videoRef.current;
-            if (video) {
-              video.srcObject = fallbackStream;
-              video.setAttribute('playsinline', 'true');
-              video.muted = true;
-              await video.play();
-              setIsStreaming(true);
-              setStreamError(null);
-            }
-          } catch (e2) {
-            console.error('カメラ起動完全失敗:', e2);
-            setStreamError('カメラの起動に失敗しました。ブラウザのカメラ許可をご確認ください。');
-            setIsStreaming(false);
+          } catch (playErr) {
+            console.warn('playエラー強制復元:', playErr);
+            setIsStreaming(true);
           }
         }
       };
