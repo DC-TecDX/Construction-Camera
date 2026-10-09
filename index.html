@@ -84,26 +84,37 @@
       const streamRef = useRef(null);
       const animFrameRef = useRef(null);
 
-      // 初期化：URLパラメータ取得
+// 初期化：URLパラメータ取得（安全デコード対応）
       useEffect(() => {
-        const p = new URLSearchParams(window.location.search);
-        const gasUrl = p.get('gasUrl') || '';
-        const recordId = p.get('recordId') || '';
-        const projectCode = p.get('projectCode') || '';
-        const projectName = p.get('projectName') || '';
-        const contractor = p.get('contractor') || '';
-        const location = p.get('location') || '';
-        const manager = p.get('manager') || '';
+        try {
+          const search = window.location.search;
+          const p = new URLSearchParams(search);
 
-        setUrlConfig({ gasUrl, recordId, projectCode, projectName, contractor, location, manager });
+          // 万が一エンコードされていてもdecodeURIComponentで「https://.../exec」に戻す
+          let rawGasUrl = p.get('gasUrl') || '';
+          if (rawGasUrl.includes('%')) {
+            try { rawGasUrl = decodeURIComponent(rawGasUrl); } catch(e){}
+          }
 
-        setBlackboard(prev => ({
-          ...prev,
-          projectName: projectName || prev.projectName,
-          contractor: contractor || prev.contractor,
-          location: location || prev.location,
-          inspector: manager || prev.inspector
-        }));
+          const recordId = p.get('recordId') || '';
+          const projectCode = p.get('projectCode') || '';
+          const projectName = p.get('projectName') || '';
+          const contractor = p.get('contractor') || '';
+          const location = p.get('location') || '';
+          const manager = p.get('manager') || '';
+
+          setUrlConfig({ gasUrl: rawGasUrl, recordId, projectCode, projectName, contractor, location, manager });
+
+          setBlackboard(prev => ({
+            ...prev,
+            projectName: projectName || prev.projectName,
+            contractor: contractor || prev.contractor,
+            location: location || prev.location,
+            inspector: manager || prev.inspector
+          }));
+        } catch (err) {
+          console.error('URLパースエラー防止:', err);
+        }
       }, []);
 
       // 【カメラ起動】iframeなしのネイティブWebページなので確実に起動します！
