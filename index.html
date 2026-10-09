@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>現場写真 電子黒板カメラ</title>
+  <title>現場写真 電子黒板カメラ (GitHub Pages版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -38,13 +38,12 @@
     function MobileCameraApp() {
       const [activeTab, setActiveTab] = useState('camera');
       const [isStreaming, setIsStreaming] = useState(false);
-      const [isStarting, setIsStarting] = useState(false);
       const [streamError, setStreamError] = useState(null);
       const [facingMode, setFacingMode] = useState('environment');
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
 
-      // URLパラメータ
+      // URLパラメータから工事情報とGASのURLを取得
       const [urlConfig, setUrlConfig] = useState({
         gasUrl: '',
         recordId: '',
@@ -87,42 +86,33 @@
 
       // 初期化：URLパラメータ取得
       useEffect(() => {
-        try {
-          const search = window.location.search;
-          const p = new URLSearchParams(search);
-
-          let rawGasUrl = p.get('gasUrl') || '';
-          if (rawGasUrl.includes('%')) {
-            try { rawGasUrl = decodeURIComponent(rawGasUrl); } catch(e){}
-          }
-
-          const recordId = p.get('recordId') || '';
-          const projectCode = p.get('projectCode') || '';
-          const projectName = p.get('projectName') || '';
-          const contractor = p.get('contractor') || '';
-          const location = p.get('location') || '';
-          const manager = p.get('manager') || '';
-
-          setUrlConfig({ gasUrl: rawGasUrl, recordId, projectCode, projectName, contractor, location, manager });
-
-          setBlackboard(prev => ({
-            ...prev,
-            projectName: projectName || prev.projectName,
-            contractor: contractor || prev.contractor,
-            location: location || prev.location,
-            inspector: manager || prev.inspector
-          }));
-        } catch (err) {
-          console.error('URL解析エラー:', err);
+        const p = new URLSearchParams(window.location.search);
+        let gasUrl = p.get('gasUrl') || '';
+        if (gasUrl.includes('%')) {
+          try { gasUrl = decodeURIComponent(gasUrl); } catch(e){}
         }
+        const recordId = p.get('recordId') || '';
+        const projectCode = p.get('projectCode') || '';
+        const projectName = p.get('projectName') || '';
+        const contractor = p.get('contractor') || '';
+        const location = p.get('location') || '';
+        const manager = p.get('manager') || '';
+
+        setUrlConfig({ gasUrl, recordId, projectCode, projectName, contractor, location, manager });
+
+        setBlackboard(prev => ({
+          ...prev,
+          projectName: projectName || prev.projectName,
+          contractor: contractor || prev.contractor,
+          location: location || prev.location,
+          inspector: manager || prev.inspector
+        }));
       }, []);
 
-      // 【スマホ対応】タップ連動で確実にカメラを起動する関数
+      // カメラ起動
       const startCamera = async (targetFacing = facingMode) => {
-        setIsStarting(true);
         setStreamError(null);
 
-        // 既存ストリームがあれば停止
         if (streamRef.current) {
           try {
             streamRef.current.getTracks().forEach(t => t.stop());
@@ -131,68 +121,73 @@
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setStreamError('お使いのブラウザはカメラ機能に対応していません。');
-          setIsStarting(false);
+          setStreamError('ブラウザがカメラ機能に対応していません。');
           return;
         }
 
-        const constraintsList = [
-          // 1. 背面カメラ・HD画質
-          { video: { facingMode: { ideal: targetFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-          // 2. 制約なしfacingMode
-          { video: { facingMode: targetFacing }, audio: false },
-          // 3. 全制約解除（端末標準）
-          { video: true, audio: false }
-        ];
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: targetFacing },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: false
+          });
 
-        let stream = null;
-        for (const constraints of constraintsList) {
-          try {
-            stream = await navigator.mediaDevices.getUserMedia(constraints);
-            if (stream) break;
-          } catch (err) {
-            console.warn('制約試行スキップ:', err);
-          }
-        }
-
-        if (!stream) {
-          setStreamError('カメラの起動に失敗しました。カメラの利用許可を確認してください。');
-          setIsStarting(false);
-          setIsStreaming(false);
-          return;
-        }
-
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (video) {
-          video.srcObject = stream;
-          video.setAttribute('playsinline', 'true');
-          video.setAttribute('webkit-playsinline', 'true');
-          video.setAttribute('muted', 'true');
-          video.muted = true;
-
-          try {
+          streamRef.current = stream;
+          const video = videoRef.current;
+          if (video) {
+            video.srcObject = stream;
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('webkit-playsinline', 'true');
+            video.muted = true;
             await video.play();
             setIsStreaming(true);
-            setIsStarting(false);
             setStreamError(null);
-          } catch(e) {
-            console.warn('video.play() 例外:', e);
-            // playがブロックされた場合でもストリームを保持
-            setIsStreaming(true);
-            setIsStarting(false);
+          }
+        } catch (err) {
+          console.warn('第1試行失敗、全制約解除で再試行:', err);
+          try {
+            const fallbackStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false
+            });
+            streamRef.current = fallbackStream;
+            const video = videoRef.current;
+            if (video) {
+              video.srcObject = fallbackStream;
+              video.setAttribute('playsinline', 'true');
+              video.muted = true;
+              await video.play();
+              setIsStreaming(true);
+              setStreamError(null);
+            }
+          } catch (e2) {
+            console.error('カメラ起動完全失敗:', e2);
+            setStreamError('カメラの起動に失敗しました。ブラウザのカメラ許可をご確認ください。');
+            setIsStreaming(false);
           }
         }
       };
 
-      // 前後カメラ反転
+      // 自動起動
+      useEffect(() => {
+        startCamera(facingMode);
+        return () => {
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+          }
+        };
+      }, [facingMode]);
+
       const handleToggleFacing = () => {
         const next = facingMode === 'environment' ? 'user' : 'environment';
         setFacingMode(next);
         startCamera(next);
       };
 
-      // 文字調整関数
+      // 文字調整
       const drawFittedText = (ctx, text, x, y, maxWidth, baseFontSize, color, align = 'left') => {
         if (!text) return;
         ctx.save();
@@ -216,7 +211,7 @@
         ctx.restore();
       };
 
-      // 電子黒板の描画
+      // 電子黒板描画
       const renderBlackboard = useCallback((ctx, w, h) => {
         const boardW = Math.round(w * blackboard.scale);
         const boardH = Math.round(boardW * 0.70);
@@ -349,6 +344,7 @@
           }
 
           renderBlackboard(ctx, w, h);
+
           animFrameRef.current = requestAnimationFrame(renderLoop);
         };
 
@@ -358,7 +354,7 @@
         };
       }, [isStreaming, facingMode, renderBlackboard]);
 
-      // シャッター撮影 ＆ kintone送信
+      // シャッター撮影 ＆ GAS経由でkintoneへPOST送信
       const handleShutter = async () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -380,6 +376,7 @@
           localStorage.setItem('GH_PHOTO_HISTORY', JSON.stringify(updated));
         } catch(e) {}
 
+        // GASへの送信
         if (urlConfig.gasUrl) {
           setIsUploading(true);
           try {
@@ -430,7 +427,7 @@
               <span className="text-xs font-black text-white tracking-wide">現場写真 電子黒板カメラ</span>
             </div>
             <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-800/80">
-              {urlConfig.projectCode ? `[${urlConfig.projectCode}]` : '現場モード'}
+              {urlConfig.projectCode ? `[${urlConfig.projectCode}]` : 'GitHub Pages版'}
             </span>
           </header>
 
@@ -464,7 +461,6 @@
           <main className="flex-1 p-3 space-y-3">
             {activeTab === 'camera' && (
               <div className="space-y-3">
-                {/* ファインダー表示枠 */}
                 <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full aspect-[4/3] flex items-center justify-center shadow-2xl">
                   <video
                     ref={videoRef}
@@ -483,28 +479,19 @@
                     </div>
                   )}
 
-                  {/* 未起動時の「ワンタップ起動」オーバーレイ（スマホのAutoplay制限を突破） */}
                   {!isStreaming && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 p-4 text-center z-20 space-y-3">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 p-4 text-center z-20 space-y-3">
                       {streamError ? (
-                        <div className="bg-rose-950/90 border border-rose-500 rounded-xl p-3 text-[11px] text-rose-200 text-left">
-                          {streamError}
-                        </div>
+                        <p className="text-xs text-rose-300">{streamError}</p>
                       ) : (
-                        <div>
-                          <p className="text-sm font-bold text-amber-300 mb-1">電子黒板スタンバイ完了</p>
-                          <p className="text-[11px] text-slate-400">下のボタンを押してカメラを起動してください</p>
-                        </div>
+                        <p className="text-xs text-amber-300 font-bold">カメラ起動中...</p>
                       )}
-
                       <button
                         type="button"
-                        disabled={isStarting}
                         onClick={() => startCamera(facingMode)}
-                        className="bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-black px-6 py-3.5 rounded-xl text-xs shadow-xl flex items-center gap-2 cursor-pointer transition border border-amber-300 disabled:opacity-50"
+                        className="bg-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs"
                       >
-                        <span className="text-base">📷</span>
-                        <span>{isStarting ? 'カメラ接続中...' : 'タップしてカメラを起動する'}</span>
+                        📷 カメラを起動する
                       </button>
                     </div>
                   )}
@@ -520,17 +507,14 @@
                   )}
                 </div>
 
-                {/* シャッターボタン */}
-                {isStreaming && (
-                  <button
-                    type="button"
-                    disabled={isUploading}
-                    onClick={handleShutter}
-                    className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black py-4 rounded-2xl text-base flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 active:scale-95 transition-all cursor-pointer border border-amber-300"
-                  >
-                    {isUploading ? <span>⏳ kintone 送信中...</span> : <span>📸 シャッター（kintoneへ送信）</span>}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={handleShutter}
+                  className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black py-4 rounded-2xl text-base flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 active:scale-95 transition-all cursor-pointer border border-amber-300"
+                >
+                  {isUploading ? <span>⏳ kintone 送信中...</span> : <span>📸 シャッター（kintoneへ送信）</span>}
+                </button>
               </div>
             )}
 
