@@ -109,7 +109,7 @@
         }));
       }, []);
 
-// カメラ起動（会社携帯・ミドルレンジ端末ハングアップ完全回避版）
+      // カメラ起動処理
       const startCamera = async (targetFacing = facingMode) => {
         setStreamError(null);
 
@@ -125,24 +125,16 @@
           return;
         }
 
-        // 端末によってフリーズしないよう、柔軟な制約順で試行
         const tryConstraints = [
-          // ① 最も安全：解像度の数値を固定せず、端末ネイティブの背面カメラを要求（会社Android対応）
           { video: { facingMode: targetFacing }, audio: false },
-          // ② HD理想指定（Pixel等で高品質になる設定）
           { video: { facingMode: { ideal: targetFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-          // ③ 全制約解除（最後の砦）
           { video: true, audio: false }
         ];
 
         let activeStream = null;
         for (const constraints of tryConstraints) {
           try {
-            // 3秒以上反応がない場合は強制タイムアウトして次へ行く安全装置
-            activeStream = await Promise.race([
-              navigator.mediaDevices.getUserMedia(constraints),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
-            ]);
+            activeStream = await navigator.mediaDevices.getUserMedia(constraints);
             if (activeStream) break;
           } catch (err) {
             console.warn('カメラ試行スキップ:', err);
@@ -150,7 +142,7 @@
         }
 
         if (!activeStream) {
-          setStreamError('カメラの起動がタイムアウトしました。');
+          setStreamError('カメラの起動に失敗しました。ブラウザのカメラ許可をご確認ください。');
           setIsStreaming(false);
           return;
         }
@@ -163,19 +155,18 @@
           video.setAttribute('webkit-playsinline', 'true');
           video.setAttribute('muted', 'true');
           video.muted = true;
-
           try {
             await video.play();
             setIsStreaming(true);
             setStreamError(null);
-          } catch (playErr) {
-            console.warn('playエラー強制復元:', playErr);
+          } catch (e) {
+            console.warn('playエラー強制復元:', e);
             setIsStreaming(true);
           }
         }
       };
 
-      // 自動起動
+      // 初回自動起動
       useEffect(() => {
         startCamera(facingMode);
         return () => {
@@ -185,13 +176,26 @@
         };
       }, [facingMode]);
 
+      // ★ここに追加：タブが「撮影」に戻ったときに映像が止まらないよう自動再開する処理
+      useEffect(() => {
+        if (activeTab === 'camera') {
+          const video = videoRef.current;
+          if (video && streamRef.current) {
+            if (video.srcObject !== streamRef.current) {
+              video.srcObject = streamRef.current;
+            }
+            video.play().catch(() => {});
+          }
+        }
+      }, [activeTab]);
+
       const handleToggleFacing = () => {
         const next = facingMode === 'environment' ? 'user' : 'environment';
         setFacingMode(next);
         startCamera(next);
       };
 
-      // 文字調整
+      // 文字調整関数
       const drawFittedText = (ctx, text, x, y, maxWidth, baseFontSize, color, align = 'left') => {
         if (!text) return;
         ctx.save();
@@ -215,7 +219,7 @@
         ctx.restore();
       };
 
-      // 電子黒板描画
+      // 電子黒板の描画
       const renderBlackboard = useCallback((ctx, w, h) => {
         const boardW = Math.round(w * blackboard.scale);
         const boardH = Math.round(boardW * 0.70);
@@ -348,7 +352,6 @@
           }
 
           renderBlackboard(ctx, w, h);
-
           animFrameRef.current = requestAnimationFrame(renderLoop);
         };
 
@@ -358,7 +361,7 @@
         };
       }, [isStreaming, facingMode, renderBlackboard]);
 
-      // シャッター撮影 ＆ GAS経由でkintoneへPOST送信
+      // シャッター撮影 ＆ kintone送信
       const handleShutter = async () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -380,7 +383,6 @@
           localStorage.setItem('GH_PHOTO_HISTORY', JSON.stringify(updated));
         } catch(e) {}
 
-        // GASへの送信
         if (urlConfig.gasUrl) {
           setIsUploading(true);
           try {
@@ -463,65 +465,65 @@
           )}
 
           <main className="flex-1 p-3 space-y-3">
-            {activeTab === 'camera' && (
-              <div className="space-y-3">
-                <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full aspect-[4/3] flex items-center justify-center shadow-2xl">
-                  <video
-                    ref={videoRef}
-                    playsInline
-                    webkit-playsinline="true"
-                    muted
-                    autoPlay
-                    className="absolute inset-0 w-full h-full object-cover hidden"
-                  />
-                  <canvas ref={canvasRef} className="w-full h-full object-contain pointer-events-none" />
+            {/* 📷 撮影タブ（要素を破棄せず hidden で隠すことで漆黒化を完全防止） */}
+            <div className={activeTab === 'camera' ? 'space-y-3' : 'hidden'}>
+              <div className="relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full aspect-[4/3] flex items-center justify-center shadow-2xl">
+                <video
+                  ref={videoRef}
+                  playsInline
+                  webkit-playsinline="true"
+                  muted
+                  autoPlay
+                  className="absolute inset-0 w-full h-full object-cover hidden"
+                />
+                <canvas ref={canvasRef} className="w-full h-full object-contain pointer-events-none" />
 
-                  {isStreaming && (
-                    <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-slate-900/85 px-2.5 py-1 rounded-lg border border-emerald-500/60 shadow">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-[10px] text-emerald-300 font-bold">🟢 画角内黒板プレビュー中</span>
-                    </div>
-                  )}
+                {isStreaming && (
+                  <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-slate-900/85 px-2.5 py-1 rounded-lg border border-emerald-500/60 shadow">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[10px] text-emerald-300 font-bold">🟢 画角内黒板プレビュー中</span>
+                  </div>
+                )}
 
-                  {!isStreaming && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 p-4 text-center z-20 space-y-3">
-                      {streamError ? (
-                        <p className="text-xs text-rose-300">{streamError}</p>
-                      ) : (
-                        <p className="text-xs text-amber-300 font-bold">カメラ起動中...</p>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => startCamera(facingMode)}
-                        className="bg-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs"
-                      >
-                        📷 カメラを起動する
-                      </button>
-                    </div>
-                  )}
-
-                  {isStreaming && (
+                {!isStreaming && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 p-4 text-center z-20 space-y-3">
+                    {streamError ? (
+                      <p className="text-xs text-rose-300">{streamError}</p>
+                    ) : (
+                      <p className="text-xs text-amber-300 font-bold">カメラ起動中...</p>
+                    )}
                     <button
                       type="button"
-                      onClick={handleToggleFacing}
-                      className="absolute top-2 right-2 z-20 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-900/80 text-slate-200 border border-slate-700 backdrop-blur-md"
+                      onClick={() => startCamera(facingMode)}
+                      className="bg-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs"
                     >
-                      🔄 反転
+                      📷 カメラを起動する
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                <button
-                  type="button"
-                  disabled={isUploading}
-                  onClick={handleShutter}
-                  className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black py-4 rounded-2xl text-base flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 active:scale-95 transition-all cursor-pointer border border-amber-300"
-                >
-                  {isUploading ? <span>⏳ kintone 送信中...</span> : <span>📸 シャッター（kintoneへ送信）</span>}
-                </button>
+                {isStreaming && (
+                  <button
+                    type="button"
+                    onClick={handleToggleFacing}
+                    className="absolute top-2 right-2 z-20 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-900/80 text-slate-200 border border-slate-700 backdrop-blur-md"
+                  >
+                    🔄 反転
+                  </button>
+                )}
               </div>
-            )}
 
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={handleShutter}
+                className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 text-slate-950 font-black py-4 rounded-2xl text-base flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 active:scale-95 transition-all cursor-pointer border border-amber-300"
+              >
+                {isUploading ? <span>⏳ kintone 送信中...</span> : <span>📸 シャッター（kintoneへ送信）</span>}
+              </button>
+            </div>
+
+            {/* 📋 黒板設定タブ */}
             {activeTab === 'board' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
                 <span className="font-bold text-amber-400 text-sm block border-b border-slate-800 pb-2">📋 黒板設定</span>
@@ -604,6 +606,7 @@
               </div>
             )}
 
+            {/* 🖼️ 撮影済みタブ */}
             {activeTab === 'history' && (
               <div className="space-y-3">
                 <span className="text-xs font-bold text-white block">撮影済み ({recentPhotos.length}枚)</span>
