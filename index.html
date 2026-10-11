@@ -404,21 +404,35 @@
         drawFittedText(ctx, blackboard.spec || '設計値・実測値どおり良好', innerX + 10 + specLabelWidth + 4, y5 + h5 / 2, innerW - specLabelWidth - 20, Math.round(h5 * 0.40), '#fef9c3', 'left', false);
 
         // ----------------------------------------------------
-        // 【下段】施工業者名 ＆ 撮影日（※縦の区切り線もなし）
+        // 【下段】施工会社名 ＆ 撮影日（見出しなしでダイレクト配置）
         // ----------------------------------------------------
-        // 左側：施工業者名
-        const contLabel = '施工業者名：';
-        ctx.font = `bold ${Math.round(h6 * 0.36)}px sans-serif`;
-        const contLabelW = ctx.measureText(contLabel).width;
-        drawFittedText(ctx, contLabel, innerX + 10, y6 + h6 / 2, contLabelW, Math.round(h6 * 0.36), '#94a3b8', 'left', true);
-        drawFittedText(ctx, blackboard.contractor || '未設定', innerX + 10 + contLabelW + 2, y6 + h6 / 2, (innerW * 0.5) - contLabelW - 14, Math.round(h6 * 0.40), '#6ee7b7', 'left', true);
+        // 左側：施工会社名（会社名のみを左寄せ配置）
+        const contractorText = blackboard.contractor || '施工者名未設定';
+        drawFittedText(
+          ctx, 
+          contractorText, 
+          innerX + 10, 
+          y6 + h6 / 2, 
+          Math.round(innerW * 0.58), 
+          Math.round(h6 * 0.44), 
+          '#6ee7b7', 
+          'left', 
+          true
+        );
 
-        // 右側：撮影日
-        const dateLabel = '撮影日：';
-        const dateLabelW = ctx.measureText(dateLabel).width;
-        const rightStartX = innerX + Math.round(innerW * 0.60);
-        drawFittedText(ctx, dateLabel, rightStartX, y6 + h6 / 2, dateLabelW, Math.round(h6 * 0.36), '#94a3b8', 'left', true);
-        drawFittedText(ctx, blackboard.date || '-', rightStartX + dateLabelW + 2, y6 + h6 / 2, innerW - (rightStartX - innerX) - dateLabelW - 10, Math.round(h6 * 0.40), '#93c5fd', 'left', true);
+        // 右側：撮影日（日付のみを右寄せ配置）
+        const dateText = blackboard.date || '-';
+        drawFittedText(
+          ctx, 
+          dateText, 
+          innerX + innerW - 10, 
+          y6 + h6 / 2, 
+          Math.round(innerW * 0.38), 
+          Math.round(h6 * 0.44), 
+          '#93c5fd', 
+          'right', 
+          true
+        );
 
         ctx.restore();
       }, [blackboard]);
