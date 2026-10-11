@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>現場写真 電子黒板カメラ</title>
+  <title>電子黒板カメラ</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -26,7 +26,6 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    // 建設業29種 一覧
     const CONSTRUCTION_29_TYPES = [
       "1. 土木一式工事", "2. 建築一式工事", "3. 大工工事", "4. 左官工事",
       "5. とび・土工・コンクリート工事", "6. 石工事", "7. 屋根工事", "8. 電気工事",
@@ -35,7 +34,7 @@
       "17. 塗装工事", "18. 防水工事", "19. 内装仕上工事", "20. 機械器具設置工事",
       "21. 熱絶縁工事", "22. 電気通信工事", "23. 造園工事", "24. さく井工事",
       "25. 建具工事", "26. 水道施設工事", "27. 消防施設工事", "28. 清掃施設工事",
-      "29. 解体工事", "その他・整備修繕"
+      "29. 解体工事", "その他"
     ];
 
     const STAGE_OPTIONS = [
@@ -44,7 +43,7 @@
       { id: '施工完了', label: '施工完了' },
       { id: '材料・機材', label: '材料確認' },
       { id: '自主検査', label: '自主検査' },
-      { id: '産業廃棄物', label: '産廃・発生材' }
+      { id: '産業廃棄物', label: '発生材' }
     ];
 
     function MobileCameraApp() {
@@ -55,7 +54,6 @@
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
 
-      // 写真の向き（横長4:3 または 縦長3:4）
       const [photoOrientation, setPhotoOrientation] = useState('landscape');
 
       const [urlConfig, setUrlConfig] = useState({
@@ -64,21 +62,20 @@
         projectCode: ''
       });
 
-      // 看板データ（透過度・特記事項2行化に対応）
       const [blackboard, setBlackboard] = useState({
-        projectName: '整備・工事記録写真',
+        projectName: '工事記録写真',
         workType29: '13. 舗装工事',
         workDetail: 'インターロッキングブロック敷設',
-        location: '1F エントランス前 歩道',
+        location: 'エントランス前 歩道',
         stage: '施工中',
-        stageDetail: '敷設作業中',
-        specAndNotes: '寸法: L=3.5m, 段差=25mm\n路盤不陸整正完了・目地砂充填確認',
+        stageDetail: '敷設中',
+        specAndNotes: '寸法: L=3.5m, 段差=25mm\n路盤整正完了・目地砂充填確認',
         constractor: '東都建設工業株式会社',
         date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }),
-        theme: 'green',          // 'green', 'black', 'white'
-        scale: 0.44,             // 看板サイズ
-        opacity: 1.0,            // ★ 透過度（0.5, 0.75, 1.0）
-        position: 'bottom-right' // 表示位置
+        theme: 'green',
+        scale: 0.44,
+        opacity: 1.0,
+        position: 'bottom-right'
       });
 
       const [recentPhotos, setRecentPhotos] = useState(() => {
@@ -136,9 +133,7 @@
             })
             .catch(() => {});
           }
-        } catch (e) {
-          console.error("URL解析スキップ:", e);
-        }
+        } catch (e) {}
       }, []);
 
       const startCamera = async (targetFacing = facingMode) => {
@@ -149,7 +144,7 @@
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setStreamError('ブラウザがカメラ機能に対応していません。');
+          setStreamError('カメラ機能に対応していません。');
           return;
         }
 
@@ -168,7 +163,7 @@
         }
 
         if (!activeStream) {
-          setStreamError('カメラの起動に失敗しました。カメラの利用許可を確認してください。');
+          setStreamError('カメラを起動できませんでした。アクセス許可を確認してください。');
           setIsStreaming(false);
           return;
         }
@@ -206,7 +201,6 @@
         setFacingMode(next);
       };
 
-      // 文字縮小描画ヘルパー（全体的に少し小さめの文字サイズで上品に配置）
       const drawFittedText = (ctx, text, x, y, maxWidth, baseFontSize, color, align = 'left') => {
         if (!text) return;
         ctx.save();
@@ -230,7 +224,6 @@
         ctx.restore();
       };
 
-      // ★ 特記事項専用：最大2行まで自動折り返し・手動改行対応の描画ヘルパー
       const drawTwoLineText = (ctx, text, x, startY, maxWidth, lineHeight, baseFontSize, color) => {
         if (!text) return;
         ctx.save();
@@ -241,14 +234,12 @@
         let fontSize = baseFontSize;
         ctx.font = `bold ${fontSize}px "Noto Sans JP", sans-serif`;
 
-        // 手動改行（\n）があるかチェック
         let lines = text.split('\n').filter(Boolean);
         if (lines.length > 2) {
           lines = [lines[0], lines.slice(1).join(' ')];
         }
 
         if (lines.length === 1) {
-          // 1行が長すぎる場合は2行に自動分割
           const fullText = lines[0];
           if (ctx.measureText(fullText).width > maxWidth) {
             let splitIndex = Math.floor(fullText.length / 2);
@@ -262,11 +253,9 @@
           }
         }
 
-        // 2行それぞれを描画
         lines.slice(0, 2).forEach((lineStr, lineIdx) => {
           let lineY = startY + (lineIdx * lineHeight);
           let currentStr = lineStr;
-          // 2行目もはみ出る場合は省略記号
           if (ctx.measureText(currentStr).width > maxWidth) {
             while (currentStr.length > 1 && ctx.measureText(currentStr + '…').width > maxWidth) {
               currentStr = currentStr.slice(0, -1);
@@ -279,7 +268,6 @@
         ctx.restore();
       };
 
-      // 電子黒板の描画
       const renderBlackboard = useCallback((ctx, w, h) => {
         const boardW = Math.round(w * blackboard.scale);
         const boardH = Math.round(boardW * 0.70);
@@ -292,10 +280,8 @@
         else if (blackboard.position === 'top-left') { bx = margin; by = margin; }
 
         ctx.save();
-        // ★ 透過度（50%, 75%, 100%）の適用
         ctx.globalAlpha = blackboard.opacity;
 
-        // デザインテーマカラー
         let frameColor = '#3d1f08';
         let innerBg = '#0d3822';
         let textMain = '#ffffff';
@@ -328,15 +314,13 @@
         ctx.fillStyle = innerBg;
         ctx.fillRect(innerX, innerY, innerW, innerH);
 
-        // レイアウト定義（上部：工事名・工種、中央：4行分相当配分、最下部：会社名・日付）
-        const row1H = innerH * 0.16; // 工事名
-        const row2H = innerH * 0.16; // 工種
-        const bottomH = innerH * 0.15; // 最下部
-        const midH = innerH - (row1H + row2H + bottomH); // 中央エリア (約0.53)
+        const row1H = innerH * 0.16;
+        const row2H = innerH * 0.16;
+        const bottomH = innerH * 0.15;
+        const midH = innerH - (row1H + row2H + bottomH);
 
         const colLabelW = Math.round(innerW * 0.23);
 
-        // 1. 工事名（文字サイズ少し縮小調整）
         ctx.strokeStyle = lineCol;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -352,37 +336,31 @@
         drawFittedText(ctx, "工事名", innerX + colLabelW / 2, innerY + row1H / 2, colLabelW - 6, Math.round(row1H * 0.40), textMain, 'center');
         drawFittedText(ctx, blackboard.projectName, innerX + colLabelW + 8, innerY + row1H / 2, innerW - colLabelW - 14, Math.round(row1H * 0.40), textSub, 'left');
 
-        // 2. 工種
         ctx.beginPath();
         ctx.moveTo(innerX, innerY + row1H + row2H);
         ctx.lineTo(innerX + innerW, innerY + row1H + row2H);
         ctx.stroke();
 
         const fullWorkCategory = `${blackboard.workType29.replace(/^\d+\.\s*/, '')} / ${blackboard.workDetail}`;
-        drawFittedText(ctx, "工　種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
+        drawFittedText(ctx, "工種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
         drawFittedText(ctx, fullWorkCategory, innerX + colLabelW + 8, innerY + row1H + row2H / 2, innerW - colLabelW - 14, Math.round(row2H * 0.40), textMain, 'left');
 
-        // 3. 中央エリア（撮影場所 1行 + 施工状況 1行 + 特記事項 2行）
         const midStartY = innerY + row1H + row2H;
-        const lineUnitH = midH / 4; // 4行分に均等分割
+        const lineUnitH = midH / 4;
 
-        // (A) 撮影場所
         const locY = midStartY + lineUnitH * 0.5;
         drawFittedText(ctx, "撮影場所:", innerX + 8, locY, colLabelW, Math.round(lineUnitH * 0.44), textMain, 'left');
         drawFittedText(ctx, blackboard.location || '-', innerX + colLabelW + 4, locY, innerW - colLabelW - 10, Math.round(lineUnitH * 0.44), textMain, 'left');
 
-        // (B) 施工状況
         const stgY = midStartY + lineUnitH * 1.5;
         drawFittedText(ctx, "施工状況:", innerX + 8, stgY, colLabelW, Math.round(lineUnitH * 0.44), textMain, 'left');
         const stageText = `${blackboard.stage} (${blackboard.stageDetail})`;
         drawFittedText(ctx, stageText, innerX + colLabelW + 4, stgY, innerW - colLabelW - 10, Math.round(lineUnitH * 0.44), textSub, 'left');
 
-        // (C) 特記事項（★最大2行表示）
         const notesLabelY = midStartY + lineUnitH * 2.5;
         drawFittedText(ctx, "特記事項:", innerX + 8, notesLabelY, colLabelW, Math.round(lineUnitH * 0.44), textMain, 'left');
 
         const notesLine1Y = midStartY + lineUnitH * 2.5;
-        const notesLine2Y = midStartY + lineUnitH * 3.4;
         const notesLineHeight = lineUnitH * 0.90;
         const notesFontSize = Math.max(9, Math.round(lineUnitH * 0.42));
 
@@ -397,7 +375,6 @@
           textMain
         );
 
-        // 4. 最下部（境界線あり、ラベルなしで会社名と日付を左右配置）
         const botStartY = innerY + innerH - bottomH;
         ctx.beginPath();
         ctx.moveTo(innerX, botStartY);
@@ -405,13 +382,12 @@
         ctx.stroke();
 
         const botCenterY = botStartY + bottomH / 2;
-        drawFittedText(ctx, blackboard.constractor || '東都建設工業株式会社', innerX + 10, botCenterY, innerW * 0.60, Math.round(bottomH * 0.42), textMain, 'left');
+        drawFittedText(ctx, blackboard.constractor || '', innerX + 10, botCenterY, innerW * 0.60, Math.round(bottomH * 0.42), textMain, 'left');
         drawFittedText(ctx, blackboard.date, innerX + innerW - 10, botCenterY, innerW * 0.35, Math.round(bottomH * 0.42), textMain, 'right');
 
         ctx.restore();
       }, [blackboard]);
 
-      // 描画ループ
       useEffect(() => {
         const renderLoop = () => {
           const canvas = canvasRef.current;
@@ -530,239 +506,231 @@
             });
 
             setIsUploading(false);
-            setUploadSuccessAlert('✅ 撮影完了！写真をkintoneへ同期送信しました');
-            setTimeout(() => setUploadSuccessAlert(null), 4000);
+            setUploadSuccessAlert('送信完了');
+            setTimeout(() => setUploadSuccessAlert(null), 3000);
           } catch(err) {
             setIsUploading(false);
-            alert('送信に失敗しました: ' + err.message);
+            alert('送信エラー: ' + err.message);
           }
         } else {
-          setUploadSuccessAlert('✅ 撮影完了！（端末に保存しました）');
-          setTimeout(() => setUploadSuccessAlert(null), 3000);
+          setUploadSuccessAlert('保存完了');
+          setTimeout(() => setUploadSuccessAlert(null), 2500);
         }
       };
 
       return (
         <div className="max-w-md mx-auto min-h-screen bg-slate-950 flex flex-col justify-between pb-6 font-sans">
           
-          <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-3.5 py-2.5 flex items-center justify-between">
+          <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${isStreaming ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-              <span className="text-xs font-black text-white tracking-wide">現場写真 電子黒板カメラ</span>
+              <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
+              <span className="text-xs font-bold text-white tracking-wide">電子黒板カメラ</span>
             </div>
-            <span className="text-[10px] font-mono font-bold bg-amber-950/80 text-amber-300 px-2 py-0.5 rounded border border-amber-800/80">
-              {urlConfig.projectCode ? `[${urlConfig.projectCode}]` : '現場モード'}
-            </span>
+            {urlConfig.projectCode && (
+              <span className="text-[11px] font-mono text-amber-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                {urlConfig.projectCode}
+              </span>
+            )}
           </header>
 
-          <div className="bg-slate-900/80 border-b border-slate-800 px-2 py-1.5 flex items-center justify-around text-xs font-bold">
+          <div className="bg-slate-900 border-b border-slate-800 px-3 py-1.5 flex items-center justify-around text-xs font-medium">
             <button
               onClick={() => setActiveTab('board')}
-              className={`flex-1 py-1.5 text-center rounded-lg transition ${activeTab === 'board' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400'}`}
+              className={`flex-1 py-1.5 text-center rounded-lg transition ${activeTab === 'board' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
             >
-              📋 看板設定
+              黒板設定
             </button>
             <button
               onClick={() => setActiveTab('camera')}
-              className={`flex-1 py-1.5 text-center rounded-lg transition ${activeTab === 'camera' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400'}`}
+              className={`flex-1 py-1.5 text-center rounded-lg transition ${activeTab === 'camera' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
             >
-              📷 撮影
+              撮影
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex-1 py-1.5 text-center rounded-lg transition ${activeTab === 'history' ? 'bg-amber-500 text-slate-950 font-black shadow' : 'text-slate-400'}`}
+              className={`flex-1 py-1.5 text-center rounded-lg transition ${activeTab === 'history' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
             >
-              🖼️ 撮影済み ({recentPhotos.length})
+              履歴 ({recentPhotos.length})
             </button>
           </div>
 
           {uploadSuccessAlert && (
-            <div className="mx-3 mt-2 bg-emerald-950/90 border border-emerald-500/80 text-emerald-200 text-xs p-2.5 rounded-xl shadow-lg">
+            <div className="mx-3 mt-2 bg-emerald-950 border border-emerald-500/60 text-emerald-200 text-xs p-2.5 rounded-xl text-center">
               {uploadSuccessAlert}
             </div>
           )}
 
           <main className="flex-1 p-3 space-y-3">
 
-            {/* 📋 看板設定タブ */}
             {activeTab === 'board' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 text-xs">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span className="font-bold text-amber-400 text-sm">📋 電子黒板の項目設定</span>
+                  <span className="font-bold text-slate-200 text-sm">黒板項目設定</span>
                   <button
                     type="button"
                     onClick={() => setActiveTab('camera')}
                     className="bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs"
                   >
-                    カメラへ ➔
+                    撮影へ
                   </button>
                 </div>
 
-                <div>
-                  <label className="text-slate-400 block text-[10px] mb-0.5">① 工事件名</label>
-                  <input
-                    type="text"
-                    value={blackboard.projectName}
-                    onChange={(e) => setBlackboard({ ...blackboard, projectName: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white"
-                  />
-                </div>
-
-                {/* 建設業29種 ＋ 作業内容 */}
-                <div className="space-y-2 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
-                  <label className="text-amber-300 font-bold block text-[11px]">② 工種（建設業29種 ＋ 作業内容）</label>
+                <div className="space-y-3">
                   <div>
-                    <label className="text-slate-400 block text-[10px] mb-0.5">業種選択（建設業29種）</label>
-                    <select
-                      value={blackboard.workType29}
-                      onChange={(e) => setBlackboard({ ...blackboard, workType29: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 text-white rounded p-2 text-xs outline-none"
-                    >
-                      {CONSTRUCTION_29_TYPES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-slate-400 block text-[10px] mb-0.5">具体的な作業内容（自由記載）</label>
+                    <label className="text-slate-400 block text-[11px] mb-1">工事名</label>
                     <input
                       type="text"
-                      placeholder="例: 配線工事 / インターロッキング敷設"
-                      value={blackboard.workDetail}
-                      onChange={(e) => setBlackboard({ ...blackboard, workDetail: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-white"
+                      value={blackboard.projectName}
+                      onChange={(e) => setBlackboard({ ...blackboard, projectName: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                    <div>
+                      <label className="text-slate-400 block text-[11px] mb-1">業種</label>
+                      <select
+                        value={blackboard.workType29}
+                        onChange={(e) => setBlackboard({ ...blackboard, workType29: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg p-2 text-xs outline-none"
+                      >
+                        {CONSTRUCTION_29_TYPES.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-slate-400 block text-[11px] mb-1">作業内容</label>
+                      <input
+                        type="text"
+                        placeholder="例: 配線工事 / インターロッキング敷設"
+                        value={blackboard.workDetail}
+                        onChange={(e) => setBlackboard({ ...blackboard, workDetail: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block text-[11px] mb-1">撮影場所</label>
+                    <input
+                      type="text"
+                      placeholder="例: 1F エントランス前 歩道"
+                      value={blackboard.location}
+                      onChange={(e) => setBlackboard({ ...blackboard, location: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block text-[11px] mb-1">施工状況</label>
+                    <div className="grid grid-cols-3 gap-1 mb-2">
+                      {STAGE_OPTIONS.map(st => (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={() => setBlackboard({ ...blackboard, stage: st.id })}
+                          className={`py-1.5 rounded-lg text-xs font-medium transition ${blackboard.stage === st.id ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-300'}`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="詳細状況 (例: 掘削完了・敷設作業中)"
+                      value={blackboard.stageDetail}
+                      onChange={(e) => setBlackboard({ ...blackboard, stageDetail: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block text-[11px] mb-1">特記事項</label>
+                    <textarea
+                      rows={2}
+                      placeholder="寸法・実測値・品質確認事項 (改行で2行表示)"
+                      value={blackboard.specAndNotes}
+                      onChange={(e) => setBlackboard({ ...blackboard, specAndNotes: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white resize-none text-xs leading-relaxed outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block text-[11px] mb-1">施工会社</label>
+                    <input
+                      type="text"
+                      value={blackboard.constractor}
+                      onChange={(e) => setBlackboard({ ...blackboard, constractor: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-slate-400 block text-[10px] mb-0.5">③ 撮影場所（測点）</label>
-                  <input
-                    type="text"
-                    placeholder="例: 1F エントランス前 歩道 / 配電盤No.2"
-                    value={blackboard.location}
-                    onChange={(e) => setBlackboard({ ...blackboard, location: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white"
-                  />
-                </div>
-
-                {/* 施工状況 */}
-                <div>
-                  <label className="text-slate-400 block text-[10px] mb-1">④ 施工状況（工程）</label>
-                  <div className="grid grid-cols-3 gap-1 mb-2">
-                    {STAGE_OPTIONS.map(st => (
-                      <button
-                        key={st.id}
-                        type="button"
-                        onClick={() => setBlackboard({ ...blackboard, stage: st.id })}
-                        className={`py-1.5 rounded font-bold text-[11px] ${blackboard.stage === st.id ? 'bg-amber-500 text-slate-950 shadow' : 'bg-slate-950 text-slate-300'}`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="状況詳細 (例: 掘削完了・敷設作業中)"
-                    value={blackboard.stageDetail}
-                    onChange={(e) => setBlackboard({ ...blackboard, stageDetail: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-white text-xs"
-                  />
-                </div>
-
-                {/* ★ 特記事項（2行入力対応textarea） */}
-                <div>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <label className="text-slate-400 block text-[10px]">⑤ 特記事項（寸法・規格統合 / 最大2行表示）</label>
-                    <span className="text-[10px] text-amber-400">※改行すると黒板でも2行に分かれます</span>
-                  </div>
-                  <textarea
-                    rows={2}
-                    placeholder="例: 寸法: L=3.5m, 段差=25mm&#13;&#10;路盤不陸整正完了・目地砂充填確認"
-                    value={blackboard.specAndNotes}
-                    onChange={(e) => setBlackboard({ ...blackboard, specAndNotes: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white resize-none text-xs leading-relaxed"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-slate-400 block text-[10px] mb-0.5">⑥ 施工業者名</label>
-                  <input
-                    type="text"
-                    value={blackboard.constractor}
-                    onChange={(e) => setBlackboard({ ...blackboard, constractor: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white"
-                  />
-                </div>
-
-                {/* 看板デザイン・表示設定 ＆ ★透過度設定 */}
                 <div className="pt-3 border-t border-slate-800 space-y-3">
-                  <span className="font-bold text-amber-300 block text-xs">🎨 看板の表示スタイル ＆ 透過度設定</span>
+                  <span className="font-bold text-slate-300 block text-xs">表示設定</span>
                   
-                  {/* テーマ切替 */}
                   <div>
-                    <label className="text-slate-400 block text-[10px] mb-1">デザインテーマ</label>
-                    <div className="grid grid-cols-3 gap-1 text-[11px]">
+                    <label className="text-slate-400 block text-[11px] mb-1">配色</label>
+                    <div className="grid grid-cols-3 gap-1 text-xs">
                       <button
                         type="button"
                         onClick={() => setBlackboard({ ...blackboard, theme: 'green' })}
-                        className={`py-1.5 rounded font-bold ${blackboard.theme === 'green' ? 'bg-emerald-600 text-white' : 'bg-slate-950 text-slate-400'}`}
+                        className={`py-1.5 rounded-lg font-medium ${blackboard.theme === 'green' ? 'bg-emerald-700 text-white font-bold' : 'bg-slate-950 text-slate-400'}`}
                       >
-                        🟩 深緑黒板
+                        グリーン
                       </button>
                       <button
                         type="button"
                         onClick={() => setBlackboard({ ...blackboard, theme: 'black' })}
-                        className={`py-1.5 rounded font-bold ${blackboard.theme === 'black' ? 'bg-slate-700 text-white' : 'bg-slate-950 text-slate-400'}`}
+                        className={`py-1.5 rounded-lg font-medium ${blackboard.theme === 'black' ? 'bg-slate-700 text-white font-bold' : 'bg-slate-950 text-slate-400'}`}
                       >
-                        ⬛ マット黒
+                        ブラック
                       </button>
                       <button
                         type="button"
                         onClick={() => setBlackboard({ ...blackboard, theme: 'white' })}
-                        className={`py-1.5 rounded font-bold ${blackboard.theme === 'white' ? 'bg-slate-200 text-slate-950' : 'bg-slate-950 text-slate-400'}`}
+                        className={`py-1.5 rounded-lg font-medium ${blackboard.theme === 'white' ? 'bg-slate-200 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400'}`}
                       >
-                        ⬜ 工事白板
+                        ホワイト
                       </button>
                     </div>
                   </div>
 
-                  {/* ★ 透過度（50% / 75% / 100%） */}
                   <div>
-                    <label className="text-slate-400 block text-[10px] mb-1">黒板の透過度（透明度）</label>
-                    <div className="grid grid-cols-3 gap-1 text-[11px]">
+                    <label className="text-slate-400 block text-[11px] mb-1">不透明度</label>
+                    <div className="grid grid-cols-3 gap-1 text-xs">
                       <button
                         type="button"
                         onClick={() => setBlackboard({ ...blackboard, opacity: 0.50 })}
-                        className={`py-1.5 rounded font-bold transition ${blackboard.opacity === 0.50 ? 'bg-amber-500 text-slate-950 font-black shadow' : 'bg-slate-950 text-slate-300'}`}
+                        className={`py-1.5 rounded-lg transition ${blackboard.opacity === 0.50 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400'}`}
                       >
-                        50% (半透明)
+                        50%
                       </button>
                       <button
                         type="button"
                         onClick={() => setBlackboard({ ...blackboard, opacity: 0.75 })}
-                        className={`py-1.5 rounded font-bold transition ${blackboard.opacity === 0.75 ? 'bg-amber-500 text-slate-950 font-black shadow' : 'bg-slate-950 text-slate-300'}`}
+                        className={`py-1.5 rounded-lg transition ${blackboard.opacity === 0.75 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400'}`}
                       >
-                        75% (標準)
+                        75%
                       </button>
                       <button
                         type="button"
                         onClick={() => setBlackboard({ ...blackboard, opacity: 1.00 })}
-                        className={`py-1.5 rounded font-bold transition ${blackboard.opacity === 1.00 ? 'bg-amber-500 text-slate-950 font-black shadow' : 'bg-slate-950 text-slate-300'}`}
+                        className={`py-1.5 rounded-lg transition ${blackboard.opacity === 1.00 ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-400'}`}
                       >
-                        100% (くっきり不透明)
+                        100%
                       </button>
                     </div>
                   </div>
 
-                  {/* 位置 ＆ サイズ */}
-                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                     <div>
-                      <label className="text-slate-400 block text-[10px] mb-0.5">表示位置</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">位置</label>
                       <select
                         value={blackboard.position}
                         onChange={(e) => setBlackboard({ ...blackboard, position: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-white"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none"
                       >
                         <option value="bottom-right">右下</option>
                         <option value="bottom-left">左下</option>
@@ -771,15 +739,15 @@
                       </select>
                     </div>
                     <div>
-                      <label className="text-slate-400 block text-[10px] mb-0.5">看板サイズ</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">サイズ</label>
                       <select
                         value={blackboard.scale}
                         onChange={(e) => setBlackboard({ ...blackboard, scale: parseFloat(e.target.value) })}
-                        className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-white"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none"
                       >
-                        <option value="0.38">小 (38%)</option>
-                        <option value="0.44">標準 (44%)</option>
-                        <option value="0.50">大 (50%)</option>
+                        <option value="0.38">小</option>
+                        <option value="0.44">中</option>
+                        <option value="0.50">大</option>
                       </select>
                     </div>
                   </div>
@@ -788,44 +756,42 @@
                 <button
                   type="button"
                   onClick={() => setActiveTab('camera')}
-                  className="w-full bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-bold py-3 rounded-xl mt-3 text-sm shadow-lg shadow-amber-500/20 cursor-pointer"
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold py-3 rounded-xl mt-2 text-xs transition"
                 >
-                  設定を完了して撮影へ進む ➔
+                  撮影を開始
                 </button>
               </div>
             )}
 
-            {/* 📷 撮影タブ */}
             <div className={activeTab === 'camera' ? 'space-y-3' : 'hidden'}>
               <div className="flex items-center justify-between px-1 text-xs">
-                <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
                   <button
                     type="button"
                     onClick={() => setPhotoOrientation('landscape')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${photoOrientation === 'landscape' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                    className={`px-3 py-1 rounded-lg transition text-xs ${photoOrientation === 'landscape' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
                   >
-                    標準 横写真 (4:3)
+                    横 (4:3)
                   </button>
                   <button
                     type="button"
                     onClick={() => setPhotoOrientation('portrait')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition text-[11px] ${photoOrientation === 'portrait' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400'}`}
+                    className={`px-3 py-1 rounded-lg transition text-xs ${photoOrientation === 'portrait' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
                   >
-                    縦写真 (3:4)
+                    縦 (3:4)
                   </button>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleToggleFacing}
-                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-900 text-slate-200 border border-slate-700 shadow"
+                  className="px-3 py-1.5 rounded-xl text-xs bg-slate-900 text-slate-300 border border-slate-700"
                 >
-                  🔄 カメラ反転
+                  カメラ反転
                 </button>
               </div>
 
-              {/* ファインダー表示枠 */}
-              <div className={`relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full flex items-center justify-center shadow-2xl transition-all ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
+              <div className={`relative bg-black rounded-2xl overflow-hidden border border-slate-800 w-full flex items-center justify-center shadow-xl transition-all ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
                 <video
                   ref={videoRef}
                   playsInline
@@ -837,65 +803,53 @@
                 <canvas ref={canvasRef} className="w-full h-full object-contain pointer-events-none" />
 
                 {isStreaming && (
-                  <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-slate-900/85 px-2.5 py-1 rounded-lg border border-emerald-500/60 shadow">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-[10px] text-emerald-300 font-bold">🟢 黒板合成中 ({Math.round(blackboard.opacity * 100)}%)</span>
+                  <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-700 text-[10px] text-slate-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>黒板合成中</span>
                   </div>
                 )}
 
                 {!isStreaming && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 p-4 text-center z-20 space-y-3">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 p-4 text-center z-20 space-y-3">
                     {streamError ? (
                       <p className="text-xs text-rose-300">{streamError}</p>
                     ) : (
-                      <p className="text-xs text-amber-300 font-bold">カメラ起動中...</p>
+                      <p className="text-xs text-slate-400">カメラ準備中</p>
                     )}
                     <button
                       type="button"
                       onClick={() => startCamera(facingMode)}
-                      className="bg-amber-500 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs"
+                      className="bg-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs"
                     >
-                      📷 カメラを起動する
+                      カメラ起動
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* 大型シャッターボタン */}
               <div className="pt-2">
                 <button
                   type="button"
                   disabled={isUploading}
                   onClick={handleShutter}
-                  className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 active:scale-95 text-slate-950 font-black py-4 rounded-2xl text-lg flex items-center justify-center gap-2 shadow-2xl shadow-amber-500/30 transition-all cursor-pointer border-2 border-amber-300"
+                  className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold py-3.5 rounded-2xl text-base shadow-lg transition-all border border-amber-300 cursor-pointer"
                 >
-                  {isUploading ? (
-                    <span>⏳ kintone 送信中...</span>
-                  ) : (
-                    <>
-                      <span className="text-2xl">📸</span>
-                      <span>シャッターを切る (kintone保存)</span>
-                    </>
-                  )}
+                  {isUploading ? "送信中..." : "撮影"}
                 </button>
-                <p className="text-[10px] text-slate-400 text-center mt-1.5">
-                  ※黒板は設定した透過度・2行特記事項で写真内に自動刻印されます
-                </p>
               </div>
             </div>
 
-            {/* 🖼️ 撮影済みタブ */}
             {activeTab === 'history' && (
               <div className="space-y-3">
-                <span className="text-xs font-bold text-white block">撮影済み写真 ({recentPhotos.length}枚)</span>
+                <span className="text-xs font-bold text-slate-300 block">撮影履歴 ({recentPhotos.length})</span>
                 {recentPhotos.length === 0 ? (
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
-                    まだ撮影した写真はありません
+                    撮影された写真はまだありません
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     {recentPhotos.map(p => (
-                      <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden p-1 shadow">
+                      <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden p-1">
                         <img src={p.url} alt="写真" className="w-full aspect-[4/3] object-cover rounded" />
                         <div className="p-1 text-[10px]">
                           <span className="text-amber-400 font-bold">{p.stage}</span>
