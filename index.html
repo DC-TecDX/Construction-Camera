@@ -73,7 +73,6 @@
     ];
 
     function MobileCameraApp() {
-      // 導線を「看板設定」から始める自然な流れに設定
       const [activeTab, setActiveTab] = useState('board');
       const [isStreaming, setIsStreaming] = useState(false);
       const [streamError, setStreamError] = useState(null);
@@ -93,7 +92,7 @@
         manager: ''
       });
 
-      // 看板データ ＆ 表示デザイン設定
+      // 看板データ（寸法・規格を特記事項へ統合）
       const [blackboard, setBlackboard] = useState({
         projectName: '整備・工事記録写真',
         selectedIndustry: '舗装工事',
@@ -101,20 +100,18 @@
         location: '1F エントランス前 西側歩道',
         stage: '施工中',
         stageDetail: 'ブロック敷設・目地詰め',
-        spec: '不陸: L=3.5m, 段差=25mm',
+        notes: '不陸: L=3.5m, 段差=25mm (設計値どおり良好)', // 特記事項（寸法・規格等）に統合
         constractor: '',
         date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-'),
-        notes: '',
-        // ★ 看板デザイン・表示設定（3種スタイル・サイズ・透明度・配置）
-        style: 'green', // 'green' | 'black' | 'white'
-        scale: 0.44,    // 0.35 〜 0.55
-        opacity: 0.96,  // 0.60 〜 1.00
-        position: 'bottom-right' // 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+        style: 'green',
+        scale: 0.44,
+        opacity: 0.96,
+        position: 'bottom-right'
       });
 
       const [recentPhotos, setRecentPhotos] = useState(() => {
         try {
-          const s = localStorage.getItem('GH_PHOTO_HISTORY_V4');
+          const s = localStorage.getItem('GH_PHOTO_HISTORY_V5');
           if (s) return JSON.parse(s);
         } catch (e) {}
         return [];
@@ -255,10 +252,10 @@
         ctx.restore();
       };
 
-      // 電子黒板描画（デザイン3種・サイズ・透明度・位置に完全対応）
+      // 電子黒板描画（特記事項・寸法統合ですっきり配置）
       const renderBlackboard = useCallback((ctx, w, h) => {
         const boardW = Math.round(w * blackboard.scale);
-        const boardH = Math.round(boardW * 0.72);
+        const boardH = Math.round(boardW * 0.70);
         const margin = 16;
 
         let bx = w - boardW - margin;
@@ -270,7 +267,6 @@
         ctx.save();
         ctx.globalAlpha = blackboard.opacity;
 
-        // 看板デザイン3種の色定義
         const styleMode = blackboard.style || 'green';
         let frameOuterColor = '#2b1810';
         let frameInnerColor = '#5c3317';
@@ -303,7 +299,6 @@
           dateColor = '#1d4ed8';
         }
 
-        // 外枠
         const borderThickness = 6;
         ctx.fillStyle = frameOuterColor;
         ctx.fillRect(bx, by, boardW, boardH);
@@ -311,7 +306,6 @@
         ctx.fillRect(bx + 1, by + 1, boardW - 2, 2);
         ctx.fillRect(bx + 1, by + 1, 2, boardH - 2);
 
-        // 盤面
         const innerX = bx + borderThickness;
         const innerY = by + borderThickness;
         const innerW = boardW - borderThickness * 2;
@@ -320,19 +314,20 @@
         ctx.fillStyle = boardBgColor;
         ctx.fillRect(innerX, innerY, innerW, innerH);
 
-        const h1 = innerH * 0.16;
-        const h2 = innerH * 0.16;
-        const h3 = innerH * 0.17;
-        const h4 = innerH * 0.18;
-        const h5 = innerH * 0.17;
-        const h6 = innerH * 0.16;
+        // 5段構成（中段が広々ゆったり）
+        const h1 = innerH * 0.18; // 工事名
+        const h2 = innerH * 0.18; // 工種
+        const h3 = innerH * 0.20; // 撮影場所
+        const h4 = innerH * 0.22; // 施工状況 (内容)
+        const h5 = innerH * 0.22; // 特記事項 (寸法・規格含む)
+        // 最下段は h4, h5 と一体化しつつ最下部に配置
 
         const y1 = innerY;
         const y2 = y1 + h1;
         const y3 = y2 + h2;
         const y4 = y3 + h3;
         const y5 = y4 + h4;
-        const y6 = y5 + h5;
+        const y6 = innerY + innerH - (innerH * 0.15); // 最下段（施工者名・日付）
 
         const labelColW = Math.round(innerW * 0.22);
 
@@ -369,21 +364,21 @@
 
         // 【中段①】撮影場所 (測点)
         const locLabel = '撮影場所 (測点)：';
-        ctx.font = `bold ${Math.round(h3 * 0.36)}px sans-serif`;
+        ctx.font = `bold ${Math.round(h3 * 0.34)}px sans-serif`;
         const locLabelWidth = ctx.measureText(locLabel).width;
-        drawFittedText(ctx, locLabel, innerX + 10, y3 + h3 / 2, locLabelWidth, Math.round(h3 * 0.36), labelTextColor, 'left', true);
-        drawFittedText(ctx, blackboard.location || '-', innerX + 10 + locLabelWidth + 4, y3 + h3 / 2, innerW - locLabelWidth - 20, Math.round(h3 * 0.40), textNormalColor, 'left', false);
+        drawFittedText(ctx, locLabel, innerX + 10, y3 + h3 / 2, locLabelWidth, Math.round(h3 * 0.34), labelTextColor, 'left', true);
+        drawFittedText(ctx, blackboard.location || '-', innerX + 10 + locLabelWidth + 4, y3 + h3 / 2, innerW - locLabelWidth - 20, Math.round(h3 * 0.38), textNormalColor, 'left', false);
 
         // 【中段②】施工状況 (内容)
         const stageLabel = '施工状況 (内容)：';
-        ctx.font = `bold ${Math.round(h4 * 0.36)}px sans-serif`;
+        ctx.font = `bold ${Math.round(h4 * 0.34)}px sans-serif`;
         const stageLabelWidth = ctx.measureText(stageLabel).width;
-        drawFittedText(ctx, stageLabel, innerX + 10, y4 + h4 / 2, stageLabelWidth, Math.round(h4 * 0.36), labelTextColor, 'left', true);
+        drawFittedText(ctx, stageLabel, innerX + 10, y4 + h4 / 2, stageLabelWidth, Math.round(h4 * 0.34), labelTextColor, 'left', true);
 
         const curStage = STAGE_OPTIONS.find(s => s.id === blackboard.stage) || STAGE_OPTIONS[1];
         const badgeText = curStage.label;
         const badgeW = Math.max(50, Math.round(ctx.measureText(badgeText).width + 16));
-        const badgeH = Math.round(h4 * 0.65);
+        const badgeH = Math.round(h4 * 0.62);
         const badgeX = innerX + 10 + stageLabelWidth + 4;
         const badgeY = y4 + (h4 - badgeH) / 2;
 
@@ -395,26 +390,26 @@
         } else {
           ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
         }
-        drawFittedText(ctx, badgeText, badgeX + badgeW / 2, y4 + h4 / 2, badgeW - 6, Math.round(h4 * 0.38), '#ffffff', 'center', true);
+        drawFittedText(ctx, badgeText, badgeX + badgeW / 2, y4 + h4 / 2, badgeW - 6, Math.round(h4 * 0.36), '#ffffff', 'center', true);
 
         if (blackboard.stageDetail) {
           const detailStartX = badgeX + badgeW + 8;
-          drawFittedText(ctx, blackboard.stageDetail, detailStartX, y4 + h4 / 2, innerW - (detailStartX - innerX) - 10, Math.round(h4 * 0.38), styleMode === 'white' ? '#b45309' : '#fef08a', 'left', false);
+          drawFittedText(ctx, blackboard.stageDetail, detailStartX, y4 + h4 / 2, innerW - (detailStartX - innerX) - 10, Math.round(h4 * 0.36), styleMode === 'white' ? '#b45309' : '#fef08a', 'left', false);
         }
 
-        // 【中段③】寸法・規格
-        const specLabel = '寸法・規格：';
-        ctx.font = `bold ${Math.round(h5 * 0.36)}px sans-serif`;
-        const specLabelWidth = ctx.measureText(specLabel).width;
-        drawFittedText(ctx, specLabel, innerX + 10, y5 + h5 / 2, specLabelWidth, Math.round(h5 * 0.36), labelTextColor, 'left', true);
-        drawFittedText(ctx, blackboard.spec || '設計値・実測値どおり良好', innerX + 10 + specLabelWidth + 4, y5 + h5 / 2, innerW - specLabelWidth - 20, Math.round(h5 * 0.40), styleMode === 'white' ? '#0f172a' : '#fef9c3', 'left', false);
+        // 【中段③】特記事項（寸法・規格統合）
+        const notesLabel = '特記事項：';
+        ctx.font = `bold ${Math.round(h5 * 0.34)}px sans-serif`;
+        const notesLabelWidth = ctx.measureText(notesLabel).width;
+        drawFittedText(ctx, notesLabel, innerX + 10, y5 + h5 / 2 - 4, notesLabelWidth, Math.round(h5 * 0.34), labelTextColor, 'left', true);
+        drawFittedText(ctx, blackboard.notes || '寸法・規格等 異常なし', innerX + 10 + notesLabelWidth + 4, y5 + h5 / 2 - 4, innerW - notesLabelWidth - 20, Math.round(h5 * 0.36), styleMode === 'white' ? '#0f172a' : '#fef9c3', 'left', false);
 
         // 【下段】施工会社名 ＆ 撮影日（見出しなし）
         const constractorText = blackboard.constractor || '施工者名未設定';
-        drawFittedText(ctx, constractorText, innerX + 10, y6 + h6 / 2, Math.round(innerW * 0.58), Math.round(h6 * 0.44), contractorColor, 'left', true);
+        drawFittedText(ctx, constractorText, innerX + 10, y6, Math.round(innerW * 0.58), Math.round(h1 * 0.40), contractorColor, 'left', true);
 
         const dateText = blackboard.date || '-';
-        drawFittedText(ctx, dateText, innerX + innerW - 10, y6 + h6 / 2, Math.round(innerW * 0.38), Math.round(h6 * 0.44), dateColor, 'right', true);
+        drawFittedText(ctx, dateText, innerX + innerW - 10, y6, Math.round(innerW * 0.38), Math.round(h1 * 0.40), dateColor, 'right', true);
 
         ctx.restore();
       }, [blackboard]);
@@ -506,7 +501,7 @@
         const updated = [photoRecord, ...recentPhotos];
         setRecentPhotos(updated);
         try {
-          localStorage.setItem('GH_PHOTO_HISTORY_V4', JSON.stringify(updated));
+          localStorage.setItem('GH_PHOTO_HISTORY_V5', JSON.stringify(updated));
         } catch(e) {}
 
         if (urlConfig.gasUrl) {
@@ -524,7 +519,7 @@
                 projectName: blackboard.projectName,
                 workCategory: fullWorkCategory,
                 location: blackboard.location,
-                spec: blackboard.spec,
+                spec: blackboard.notes, // 寸法・規格として特記事項を同期
                 date: blackboard.date,
                 constractor: blackboard.constractor,
                 notes: [blackboard.stageDetail, blackboard.notes].filter(Boolean).join(' / ') || '-'
@@ -566,7 +561,6 @@
             </span>
           </header>
 
-          {/* ★ タブの並び順: 看板設定 ➔ 撮影 ➔ 撮影済み */}
           <div className="bg-slate-900/80 border-b border-slate-800 px-2 py-1.5 flex items-center justify-around text-xs font-bold">
             <button
               onClick={() => setActiveTab('board')}
@@ -596,7 +590,6 @@
 
           <main className="flex-1 p-3 space-y-3">
             
-            {/* 1. 📋 看板設定タブ */}
             {activeTab === 'board' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 text-xs max-h-[82vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -604,7 +597,6 @@
                   <span className="text-[10px] text-slate-400">撮影手順書準拠</span>
                 </div>
 
-                {/* セクション A: 看板の記載内容 */}
                 <div className="space-y-3">
                   <span className="font-bold text-slate-300 block text-xs border-b border-slate-800/60 pb-1">
                     【1】黒板の記載項目
@@ -717,25 +709,28 @@
                     </div>
                   </div>
 
+                  {/* ★ 寸法・規格と特記事項を完全統合 */}
                   <div>
-                    <label className="text-slate-300 font-bold block text-[11px] mb-1">寸法・規格</label>
+                    <label className="text-slate-300 font-bold block text-[11px] mb-1">
+                      特記事項（寸法・規格・メモ等）
+                    </label>
                     <input
                       type="text"
-                      value={blackboard.spec}
-                      onChange={(e) => setBlackboard({ ...blackboard, spec: e.target.value })}
-                      placeholder="例: 不陸: L=3.5m, 段差=25mm"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                      value={blackboard.notes}
+                      onChange={(e) => setBlackboard({ ...blackboard, notes: e.target.value })}
+                      placeholder="例: 不陸: L=3.5m, 段差=25mm / 舗装下部空洞なし"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white font-medium"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-slate-300 font-bold block text-[11px] mb-1">施工者名</label>
+                      <label className="text-slate-300 font-bold block text-[11px] mb-1">施工者名 / 立会者名</label>
                       <input
                         type="text"
                         value={blackboard.constractor}
                         onChange={(e) => setBlackboard({ ...blackboard, constractor: e.target.value })}
-                        placeholder="会社名"
+                        placeholder="会社名または氏名"
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-[11px]"
                       />
                     </div>
@@ -751,14 +746,13 @@
                   </div>
                 </div>
 
-                {/* ★ セクション B: 看板の表示・デザイン設定（独立セクション） */}
+                {/* 看板表示設定 */}
                 <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3 pt-3">
                   <span className="font-bold text-amber-400 block text-xs border-b border-slate-800 pb-1 flex items-center gap-1.5">
                     <span>🎨</span>
                     <span>【2】看板の表示・デザイン設定</span>
                   </span>
 
-                  {/* 看板デザイン3種 */}
                   <div>
                     <label className="text-slate-300 block text-[11px] mb-1 font-bold">看板デザイン (3種)</label>
                     <div className="grid grid-cols-3 gap-1.5">
@@ -789,7 +783,6 @@
                     </div>
                   </div>
 
-                  {/* 表示位置 (4隅) */}
                   <div>
                     <label className="text-slate-300 block text-[11px] mb-1 font-bold">看板の表示位置</label>
                     <div className="grid grid-cols-4 gap-1">
@@ -811,7 +804,6 @@
                     </div>
                   </div>
 
-                  {/* サイズ・透明度スライダー */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div>
                       <div className="flex justify-between text-[10px] text-slate-400 mb-0.5">
@@ -857,7 +849,6 @@
               </div>
             )}
 
-            {/* 2. 📷 撮影タブ */}
             <div className={activeTab === 'camera' ? 'space-y-3' : 'hidden'}>
               <div className="flex items-center justify-between px-1 text-xs">
                 <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
@@ -947,7 +938,6 @@
               </div>
             </div>
 
-            {/* 3. 🖼️ 撮影済みタブ */}
             {activeTab === 'history' && (
               <div className="space-y-3">
                 <span className="text-xs font-bold text-white block">撮影済み写真 ({recentPhotos.length}枚)</span>
