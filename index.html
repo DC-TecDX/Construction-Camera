@@ -263,10 +263,9 @@
       };
 
       // ========================================================
-      // 🎨 電子黒板描画（添付の「看板構成イメージ」に完全準拠）
+      // 🎨 電子黒板描画（ご指定の区切り線なし・すっきり構成版）
       // ========================================================
       const renderBlackboard = useCallback((ctx, w, h) => {
-        // 看板のサイズ算出 (標準的な黒板比率 4:3 弱)
         const boardW = Math.round(w * blackboard.scale);
         const boardH = Math.round(boardW * 0.72);
         const margin = 16;
@@ -280,7 +279,7 @@
         ctx.save();
         ctx.globalAlpha = blackboard.opacity;
 
-        // 1. 木枠フレーム（クラシックな木製風）
+        // 1. 外枠フレーム
         const borderThickness = 6;
         ctx.fillStyle = '#2b1810';
         ctx.fillRect(bx, by, boardW, boardH);
@@ -288,7 +287,7 @@
         ctx.fillRect(bx + 1, by + 1, boardW - 2, 2);
         ctx.fillRect(bx + 1, by + 1, 2, boardH - 2);
 
-        // 2. 黒板ベース（国交省標準の深緑黒板）
+        // 2. 黒板盤面
         const innerX = bx + borderThickness;
         const innerY = by + borderThickness;
         const innerW = boardW - borderThickness * 2;
@@ -297,19 +296,13 @@
         ctx.fillStyle = '#0f3822';
         ctx.fillRect(innerX, innerY, innerW, innerH);
 
-        // 罫線と各セクションの高さ計算
-        // 行1: 工事名 (16%)
-        // 行2: 工種 (16%)
-        // 行3: 撮影場所 (18%)
-        // 行4: 施工状況 (18%)
-        // 行5: 寸法・規格 (16%)
-        // 行6: 施工業者名 / 撮影日 (16%)
-        const h1 = innerH * 0.16;
-        const h2 = innerH * 0.16;
-        const h3 = innerH * 0.17;
-        const h4 = innerH * 0.18;
-        const h5 = innerH * 0.17;
-        const h6 = innerH * 0.16;
+        // 高さ比率の配分
+        const h1 = innerH * 0.16; // 工事名
+        const h2 = innerH * 0.16; // 工種
+        const h3 = innerH * 0.17; // 撮影場所
+        const h4 = innerH * 0.18; // 施工状況
+        const h5 = innerH * 0.17; // 寸法・規格
+        const h6 = innerH * 0.16; // 施工業者名 / 撮影日
 
         const y1 = innerY;
         const y2 = y1 + h1;
@@ -318,67 +311,72 @@
         const y5 = y4 + h4;
         const y6 = y5 + h5;
 
-        // ラベル列幅 (左側のヘッダー枠 24%)
-        const labelColW = Math.round(innerW * 0.24);
+        const labelColW = Math.round(innerW * 0.22);
 
-        // 罫線スタイル
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        // ----------------------------------------------------
+        // ★ 罫線描画（工事名・工種の部分のみ残し、下部の線は全て排除）
+        // ----------------------------------------------------
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
         ctx.lineWidth = 1;
 
-        // 水平ライン
-        [y2, y3, y4, y5, y6].forEach(lineY => {
-          ctx.beginPath();
-          ctx.moveTo(innerX, lineY);
-          ctx.lineTo(innerX + innerW, lineY);
-          ctx.stroke();
-        });
+        // 工事名の下の水平線
+        ctx.beginPath();
+        ctx.moveTo(innerX, y2);
+        ctx.lineTo(innerX + innerW, y2);
+        ctx.stroke();
 
-        // 1〜2行目の縦区切り線
+        // 工種の下の水平線
+        ctx.beginPath();
+        ctx.moveTo(innerX, y3);
+        ctx.lineTo(innerX + innerW, y3);
+        ctx.stroke();
+
+        // 工事名と工種のラベル右側の縦線
         ctx.beginPath();
         ctx.moveTo(innerX + labelColW, y1);
         ctx.lineTo(innerX + labelColW, y3);
         ctx.stroke();
 
-        // 1〜2行目の左側ラベル背景の透過シェード
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        // ラベル枠の背景透過シェード
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.fillRect(innerX, y1, labelColW, h1 + h2);
 
         // ----------------------------------------------------
-        // 【行1】工事名
+        // 【上段】工事名
         // ----------------------------------------------------
-        drawFittedText(ctx, '工 事 名', innerX + labelColW / 2, y1 + h1 / 2, labelColW - 8, Math.round(h1 * 0.40), '#f8fafc', 'center', true);
+        drawFittedText(ctx, '工事名', innerX + labelColW / 2, y1 + h1 / 2, labelColW - 6, Math.round(h1 * 0.42), '#f8fafc', 'center', true);
         drawFittedText(ctx, blackboard.projectName || '未設定', innerX + labelColW + 10, y1 + h1 / 2, innerW - labelColW - 16, Math.round(h1 * 0.46), '#fef08a', 'left', true);
 
         // ----------------------------------------------------
-        // 【行2】工種（建設業29種 / 工事内容）
+        // 【2段目】工種（建設業29種 / 工事内容）
         // ----------------------------------------------------
-        drawFittedText(ctx, '工　種', innerX + labelColW / 2, y2 + h2 / 2, labelColW - 8, Math.round(h2 * 0.40), '#f8fafc', 'center', true);
+        drawFittedText(ctx, '工　種', innerX + labelColW / 2, y2 + h2 / 2, labelColW - 6, Math.round(h2 * 0.42), '#f8fafc', 'center', true);
         const fullWorkCategory = `${blackboard.selectedIndustry || '一般工事'}${blackboard.workDetail ? ' / ' + blackboard.workDetail : ''}`;
         drawFittedText(ctx, fullWorkCategory, innerX + labelColW + 10, y2 + h2 / 2, innerW - labelColW - 16, Math.round(h2 * 0.44), '#ffffff', 'left', true);
 
         // ----------------------------------------------------
-        // 【行3】撮影場所 (測点)
+        // 【中段①】撮影場所 (測点)（※区切り線なし）
         // ----------------------------------------------------
         const locLabel = '撮影場所 (測点)：';
         ctx.font = `bold ${Math.round(h3 * 0.36)}px sans-serif`;
         const locLabelWidth = ctx.measureText(locLabel).width;
-        drawFittedText(ctx, locLabel, innerX + 8, y3 + h3 / 2, locLabelWidth, Math.round(h3 * 0.36), '#cbd5e1', 'left', true);
-        drawFittedText(ctx, blackboard.location || '-', innerX + 8 + locLabelWidth + 4, y3 + h3 / 2, innerW - locLabelWidth - 16, Math.round(h3 * 0.40), '#ffffff', 'left', false);
+        drawFittedText(ctx, locLabel, innerX + 10, y3 + h3 / 2, locLabelWidth, Math.round(h3 * 0.36), '#cbd5e1', 'left', true);
+        drawFittedText(ctx, blackboard.location || '-', innerX + 10 + locLabelWidth + 4, y3 + h3 / 2, innerW - locLabelWidth - 20, Math.round(h3 * 0.40), '#ffffff', 'left', false);
 
         // ----------------------------------------------------
-        // 【行4】施工状況 (内容)
+        // 【中段②】施工状況 (内容)（※区切り線なし）
         // ----------------------------------------------------
         const stageLabel = '施工状況 (内容)：';
         ctx.font = `bold ${Math.round(h4 * 0.36)}px sans-serif`;
         const stageLabelWidth = ctx.measureText(stageLabel).width;
-        drawFittedText(ctx, stageLabel, innerX + 8, y4 + h4 / 2, stageLabelWidth, Math.round(h4 * 0.36), '#cbd5e1', 'left', true);
+        drawFittedText(ctx, stageLabel, innerX + 10, y4 + h4 / 2, stageLabelWidth, Math.round(h4 * 0.36), '#cbd5e1', 'left', true);
 
-        // 工程バッジ（施工前 / 施工中 / 施工完了 等）
+        // 工程バッジ
         const curStage = STAGE_OPTIONS.find(s => s.id === blackboard.stage) || STAGE_OPTIONS[1];
         const badgeText = curStage.label;
         const badgeW = Math.max(50, Math.round(ctx.measureText(badgeText).width + 16));
         const badgeH = Math.round(h4 * 0.65);
-        const badgeX = innerX + 8 + stageLabelWidth + 4;
+        const badgeX = innerX + 10 + stageLabelWidth + 4;
         const badgeY = y4 + (h4 - badgeH) / 2;
 
         ctx.fillStyle = curStage.color;
@@ -391,43 +389,36 @@
         }
         drawFittedText(ctx, badgeText, badgeX + badgeW / 2, y4 + h4 / 2, badgeW - 6, Math.round(h4 * 0.38), '#ffffff', 'center', true);
 
-        // 具体的な状態（詳細）
         if (blackboard.stageDetail) {
           const detailStartX = badgeX + badgeW + 8;
-          drawFittedText(ctx, blackboard.stageDetail, detailStartX, y4 + h4 / 2, innerW - (detailStartX - innerX) - 8, Math.round(h4 * 0.38), '#fef08a', 'left', false);
+          drawFittedText(ctx, blackboard.stageDetail, detailStartX, y4 + h4 / 2, innerW - (detailStartX - innerX) - 10, Math.round(h4 * 0.38), '#fef08a', 'left', false);
         }
 
         // ----------------------------------------------------
-        // 【行5】寸法・規格
+        // 【中段③】寸法・規格（※区切り線なし）
         // ----------------------------------------------------
         const specLabel = '寸法・規格：';
         ctx.font = `bold ${Math.round(h5 * 0.36)}px sans-serif`;
         const specLabelWidth = ctx.measureText(specLabel).width;
-        drawFittedText(ctx, specLabel, innerX + 8, y5 + h5 / 2, specLabelWidth, Math.round(h5 * 0.36), '#cbd5e1', 'left', true);
-        drawFittedText(ctx, blackboard.spec || '設計値・実測値どおり良好', innerX + 8 + specLabelWidth + 4, y5 + h5 / 2, innerW - specLabelWidth - 16, Math.round(h5 * 0.40), '#fef9c3', 'left', false);
+        drawFittedText(ctx, specLabel, innerX + 10, y5 + h5 / 2, specLabelWidth, Math.round(h5 * 0.36), '#cbd5e1', 'left', true);
+        drawFittedText(ctx, blackboard.spec || '設計値・実測値どおり良好', innerX + 10 + specLabelWidth + 4, y5 + h5 / 2, innerW - specLabelWidth - 20, Math.round(h5 * 0.40), '#fef9c3', 'left', false);
 
         // ----------------------------------------------------
-        // 【行6】施工業者名 ＆ 撮影日
+        // 【下段】施工業者名 ＆ 撮影日（※縦の区切り線もなし）
         // ----------------------------------------------------
-        // 縦区切り線（下段中央）
-        const halfW = innerW / 2;
-        ctx.beginPath();
-        ctx.moveTo(innerX + halfW, y6);
-        ctx.lineTo(innerX + halfW, innerY + innerH);
-        ctx.stroke();
-
-        // 左: 施工業者名
-        const contLabel = '施工者：';
+        // 左側：施工業者名
+        const contLabel = '施工業者名：';
         ctx.font = `bold ${Math.round(h6 * 0.36)}px sans-serif`;
         const contLabelW = ctx.measureText(contLabel).width;
-        drawFittedText(ctx, contLabel, innerX + 8, y6 + h6 / 2, contLabelW, Math.round(h6 * 0.36), '#94a3b8', 'left', true);
-        drawFittedText(ctx, blackboard.contractor || '未設定', innerX + 8 + contLabelW + 2, y6 + h6 / 2, halfW - contLabelW - 14, Math.round(h6 * 0.40), '#6ee7b7', 'left', true);
+        drawFittedText(ctx, contLabel, innerX + 10, y6 + h6 / 2, contLabelW, Math.round(h6 * 0.36), '#94a3b8', 'left', true);
+        drawFittedText(ctx, blackboard.contractor || '未設定', innerX + 10 + contLabelW + 2, y6 + h6 / 2, (innerW * 0.5) - contLabelW - 14, Math.round(h6 * 0.40), '#6ee7b7', 'left', true);
 
-        // 右: 撮影日
+        // 右側：撮影日
         const dateLabel = '撮影日：';
         const dateLabelW = ctx.measureText(dateLabel).width;
-        drawFittedText(ctx, dateLabel, innerX + halfW + 8, y6 + h6 / 2, dateLabelW, Math.round(h6 * 0.36), '#94a3b8', 'left', true);
-        drawFittedText(ctx, blackboard.date || '-', innerX + halfW + 8 + dateLabelW + 2, y6 + h6 / 2, halfW - dateLabelW - 14, Math.round(h6 * 0.40), '#93c5fd', 'left', true);
+        const rightStartX = innerX + Math.round(innerW * 0.60);
+        drawFittedText(ctx, dateLabel, rightStartX, y6 + h6 / 2, dateLabelW, Math.round(h6 * 0.36), '#94a3b8', 'left', true);
+        drawFittedText(ctx, blackboard.date || '-', rightStartX + dateLabelW + 2, y6 + h6 / 2, innerW - (rightStartX - innerX) - dateLabelW - 10, Math.round(h6 * 0.40), '#93c5fd', 'left', true);
 
         ctx.restore();
       }, [blackboard]);
