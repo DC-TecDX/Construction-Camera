@@ -22,7 +22,6 @@
 <body class="bg-slate-950 text-slate-100 antialiased selection:bg-amber-500 selection:text-slate-950">
 
   <div id="root">
-    <!-- 万が一JS読み込みで止まった場合の初期表示 -->
     <div id="loading-fallback" class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
       <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
       <p class="text-sm font-bold text-amber-400">現場カメラシステムを起動中...</p>
@@ -33,9 +32,6 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    // ==========================================
-    // 建設業29種マスタ (画像資料に完全準拠)
-    // ==========================================
     const CONSTRUCTION_TYPES_29 = [
       { id: '1', category: '一式工事', name: '土木一式工事', examples: ['道路改良工事', '宅地造成工事', '擁壁工事'] },
       { id: '2', category: '一式工事', name: '建築一式工事', examples: ['新築工事', '増改築工事', '耐震補強工事'] },
@@ -68,7 +64,6 @@
       { id: '29', category: '専門工事', name: '解体工事', examples: ['内装解体工事', '木造解体工事', 'RC解体工事', 'アスベスト除去'] }
     ];
 
-    // 施工状況（工程）kintone定義書ドロップダウン準拠
     const STAGE_OPTIONS = [
       { id: '施工前', label: '施工前', color: '#1d4ed8' },
       { id: '施工中', label: '施工中', color: '#b45309' },
@@ -85,7 +80,6 @@
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
 
-      // 写真の向き（国交省標準 4:3横 / 3:4縦）
       const [photoOrientation, setPhotoOrientation] = useState('landscape');
 
       const [urlConfig, setUrlConfig] = useState({
@@ -93,31 +87,30 @@
         recordId: '',
         projectCode: '',
         projectName: '',
-        contractor: '',
+        constractor: '',
         location: '',
         manager: ''
       });
 
-      // 電子黒板データ（添付の「看板構成イメージ」に完全準拠）
       const [blackboard, setBlackboard] = useState({
         projectName: '整備・工事記録写真',
-        selectedIndustry: '舗装工事', // 建設業29種
-        workDetail: 'インターロッキングブロック敷設', // 工事内容（自由記載/選択）
-        location: '1F エントランス前 西側歩道', // 撮影場所（測点）
-        stage: '施工中', // 施工状況（工程）
-        stageDetail: 'ブロック敷設・目地詰め', // 現場の具体的な状態
-        spec: '不陸: L=3.5m, 段差=25mm', // 寸法・規格
-        contractor: '', // 施工業者名
-        date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-'), // 撮影日
-        notes: '', // 特記事項
-        scale: 0.44, // 看板の大きさ（横幅に対する比率）
+        selectedIndustry: '舗装工事',
+        workDetail: 'インターロッキングブロック敷設',
+        location: '1F エントランス前 西側歩道',
+        stage: '施工中',
+        stageDetail: 'ブロック敷設・目地詰め',
+        spec: '不陸: L=3.5m, 段差=25mm',
+        constractor: '',
+        date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-'),
+        notes: '',
+        scale: 0.44,
         opacity: 0.96,
         position: 'bottom-right'
       });
 
       const [recentPhotos, setRecentPhotos] = useState(() => {
         try {
-          const s = localStorage.getItem('GH_PHOTO_HISTORY_V2');
+          const s = localStorage.getItem('GH_PHOTO_HISTORY_V3');
           if (s) return JSON.parse(s);
         } catch (e) {}
         return [];
@@ -128,7 +121,6 @@
       const streamRef = useRef(null);
       const animFrameRef = useRef(null);
 
-      // 初期化：URLパラメータの取得
       useEffect(() => {
         const p = new URLSearchParams(window.location.search);
         let gasUrl = p.get('gasUrl') || '';
@@ -138,21 +130,20 @@
         const recordId = p.get('recordId') || '';
         const projectCode = p.get('projectCode') || '';
         const projectName = p.get('projectName') || '';
-        const contractor = p.get('contractor') || '';
+        const constractor = p.get('constractor') || p.get('contractor') || '';
         const location = p.get('location') || '';
         const manager = p.get('manager') || '';
 
-        setUrlConfig({ gasUrl, recordId, projectCode, projectName, contractor, location, manager });
+        setUrlConfig({ gasUrl, recordId, projectCode, projectName, constractor, location, manager });
 
         setBlackboard(prev => ({
           ...prev,
           projectName: projectName || prev.projectName,
-          contractor: contractor || prev.contractor,
+          constractor: constractor || prev.constractor,
           location: location || prev.location
         }));
       }, []);
 
-      // カメラ起動
       const startCamera = async (targetFacing = facingMode) => {
         setStreamError(null);
 
@@ -219,7 +210,6 @@
         };
       }, [facingMode]);
 
-      // タブ復帰時の映像再起動保証
       useEffect(() => {
         if (activeTab === 'camera') {
           const video = videoRef.current;
@@ -238,7 +228,6 @@
         startCamera(next);
       };
 
-      // テキスト自動縮小描画ヘルパー
       const drawFittedText = (ctx, text, x, y, maxWidth, baseFontSize, color, align = 'left', isBold = true) => {
         if (!text) return;
         ctx.save();
@@ -262,9 +251,7 @@
         ctx.restore();
       };
 
-      // ========================================================
-      // 🎨 電子黒板描画（ご指定の区切り線なし・すっきり構成版）
-      // ========================================================
+      // 電子黒板描画（区切り線なし・見出しなしのすっきり版）
       const renderBlackboard = useCallback((ctx, w, h) => {
         const boardW = Math.round(w * blackboard.scale);
         const boardH = Math.round(boardW * 0.72);
@@ -279,7 +266,6 @@
         ctx.save();
         ctx.globalAlpha = blackboard.opacity;
 
-        // 1. 外枠フレーム
         const borderThickness = 6;
         ctx.fillStyle = '#2b1810';
         ctx.fillRect(bx, by, boardW, boardH);
@@ -287,7 +273,6 @@
         ctx.fillRect(bx + 1, by + 1, boardW - 2, 2);
         ctx.fillRect(bx + 1, by + 1, 2, boardH - 2);
 
-        // 2. 黒板盤面
         const innerX = bx + borderThickness;
         const innerY = by + borderThickness;
         const innerW = boardW - borderThickness * 2;
@@ -296,13 +281,12 @@
         ctx.fillStyle = '#0f3822';
         ctx.fillRect(innerX, innerY, innerW, innerH);
 
-        // 高さ比率の配分
-        const h1 = innerH * 0.16; // 工事名
-        const h2 = innerH * 0.16; // 工種
-        const h3 = innerH * 0.17; // 撮影場所
-        const h4 = innerH * 0.18; // 施工状況
-        const h5 = innerH * 0.17; // 寸法・規格
-        const h6 = innerH * 0.16; // 施工業者名 / 撮影日
+        const h1 = innerH * 0.16;
+        const h2 = innerH * 0.16;
+        const h3 = innerH * 0.17;
+        const h4 = innerH * 0.18;
+        const h5 = innerH * 0.17;
+        const h6 = innerH * 0.16;
 
         const y1 = innerY;
         const y2 = y1 + h1;
@@ -313,65 +297,50 @@
 
         const labelColW = Math.round(innerW * 0.22);
 
-        // ----------------------------------------------------
-        // ★ 罫線描画（工事名・工種の部分のみ残し、下部の線は全て排除）
-        // ----------------------------------------------------
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
         ctx.lineWidth = 1;
 
-        // 工事名の下の水平線
+        // 工事名・工種のみの罫線
         ctx.beginPath();
         ctx.moveTo(innerX, y2);
         ctx.lineTo(innerX + innerW, y2);
         ctx.stroke();
 
-        // 工種の下の水平線
         ctx.beginPath();
         ctx.moveTo(innerX, y3);
         ctx.lineTo(innerX + innerW, y3);
         ctx.stroke();
 
-        // 工事名と工種のラベル右側の縦線
         ctx.beginPath();
         ctx.moveTo(innerX + labelColW, y1);
         ctx.lineTo(innerX + labelColW, y3);
         ctx.stroke();
 
-        // ラベル枠の背景透過シェード
         ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.fillRect(innerX, y1, labelColW, h1 + h2);
 
-        // ----------------------------------------------------
         // 【上段】工事名
-        // ----------------------------------------------------
         drawFittedText(ctx, '工事名', innerX + labelColW / 2, y1 + h1 / 2, labelColW - 6, Math.round(h1 * 0.42), '#f8fafc', 'center', true);
         drawFittedText(ctx, blackboard.projectName || '未設定', innerX + labelColW + 10, y1 + h1 / 2, innerW - labelColW - 16, Math.round(h1 * 0.46), '#fef08a', 'left', true);
 
-        // ----------------------------------------------------
-        // 【2段目】工種（建設業29種 / 工事内容）
-        // ----------------------------------------------------
+        // 【2段目】工種
         drawFittedText(ctx, '工　種', innerX + labelColW / 2, y2 + h2 / 2, labelColW - 6, Math.round(h2 * 0.42), '#f8fafc', 'center', true);
         const fullWorkCategory = `${blackboard.selectedIndustry || '一般工事'}${blackboard.workDetail ? ' / ' + blackboard.workDetail : ''}`;
         drawFittedText(ctx, fullWorkCategory, innerX + labelColW + 10, y2 + h2 / 2, innerW - labelColW - 16, Math.round(h2 * 0.44), '#ffffff', 'left', true);
 
-        // ----------------------------------------------------
-        // 【中段①】撮影場所 (測点)（※区切り線なし）
-        // ----------------------------------------------------
+        // 【中段①】撮影場所 (測点)
         const locLabel = '撮影場所 (測点)：';
         ctx.font = `bold ${Math.round(h3 * 0.36)}px sans-serif`;
         const locLabelWidth = ctx.measureText(locLabel).width;
         drawFittedText(ctx, locLabel, innerX + 10, y3 + h3 / 2, locLabelWidth, Math.round(h3 * 0.36), '#cbd5e1', 'left', true);
         drawFittedText(ctx, blackboard.location || '-', innerX + 10 + locLabelWidth + 4, y3 + h3 / 2, innerW - locLabelWidth - 20, Math.round(h3 * 0.40), '#ffffff', 'left', false);
 
-        // ----------------------------------------------------
-        // 【中段②】施工状況 (内容)（※区切り線なし）
-        // ----------------------------------------------------
+        // 【中段②】施工状況 (内容)
         const stageLabel = '施工状況 (内容)：';
         ctx.font = `bold ${Math.round(h4 * 0.36)}px sans-serif`;
         const stageLabelWidth = ctx.measureText(stageLabel).width;
         drawFittedText(ctx, stageLabel, innerX + 10, y4 + h4 / 2, stageLabelWidth, Math.round(h4 * 0.36), '#cbd5e1', 'left', true);
 
-        // 工程バッジ
         const curStage = STAGE_OPTIONS.find(s => s.id === blackboard.stage) || STAGE_OPTIONS[1];
         const badgeText = curStage.label;
         const badgeW = Math.max(50, Math.round(ctx.measureText(badgeText).width + 16));
@@ -394,50 +363,23 @@
           drawFittedText(ctx, blackboard.stageDetail, detailStartX, y4 + h4 / 2, innerW - (detailStartX - innerX) - 10, Math.round(h4 * 0.38), '#fef08a', 'left', false);
         }
 
-        // ----------------------------------------------------
-        // 【中段③】寸法・規格（※区切り線なし）
-        // ----------------------------------------------------
+        // 【中段③】寸法・規格
         const specLabel = '寸法・規格：';
         ctx.font = `bold ${Math.round(h5 * 0.36)}px sans-serif`;
         const specLabelWidth = ctx.measureText(specLabel).width;
         drawFittedText(ctx, specLabel, innerX + 10, y5 + h5 / 2, specLabelWidth, Math.round(h5 * 0.36), '#cbd5e1', 'left', true);
         drawFittedText(ctx, blackboard.spec || '設計値・実測値どおり良好', innerX + 10 + specLabelWidth + 4, y5 + h5 / 2, innerW - specLabelWidth - 20, Math.round(h5 * 0.40), '#fef9c3', 'left', false);
 
-        // ----------------------------------------------------
-        // 【下段】施工会社名 ＆ 撮影日（見出しなしでダイレクト配置）
-        // ----------------------------------------------------
-        // 左側：施工会社名（会社名のみを左寄せ配置）
-        const contractorText = blackboard.contractor || '施工者名未設定';
-        drawFittedText(
-          ctx, 
-          contractorText, 
-          innerX + 10, 
-          y6 + h6 / 2, 
-          Math.round(innerW * 0.58), 
-          Math.round(h6 * 0.44), 
-          '#6ee7b7', 
-          'left', 
-          true
-        );
+        // 【下段】施工会社名 ＆ 撮影日（見出しラベルなし）
+        const constractorText = blackboard.constractor || '施工者名未設定';
+        drawFittedText(ctx, constractorText, innerX + 10, y6 + h6 / 2, Math.round(innerW * 0.58), Math.round(h6 * 0.44), '#6ee7b7', 'left', true);
 
-        // 右側：撮影日（日付のみを右寄せ配置）
         const dateText = blackboard.date || '-';
-        drawFittedText(
-          ctx, 
-          dateText, 
-          innerX + innerW - 10, 
-          y6 + h6 / 2, 
-          Math.round(innerW * 0.38), 
-          Math.round(h6 * 0.44), 
-          '#93c5fd', 
-          'right', 
-          true
-        );
+        drawFittedText(ctx, dateText, innerX + innerW - 10, y6 + h6 / 2, Math.round(innerW * 0.38), Math.round(h6 * 0.44), '#93c5fd', 'right', true);
 
         ctx.restore();
       }, [blackboard]);
 
-      // リアルタイム描画ループ（アスペクト比を歪ませずに中央クロップ）
       useEffect(() => {
         const renderLoop = () => {
           const canvas = canvasRef.current;
@@ -446,7 +388,6 @@
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
-          // 国交省標準 4:3（横長: 1200x900）または 3:4（縦長: 900x1200）
           const isLandscape = (photoOrientation === 'landscape');
           const canvasW = isLandscape ? 1200 : 900;
           const canvasH = isLandscape ? 900 : 1200;
@@ -497,9 +438,7 @@
             ctx.fillRect(0, 0, canvasW, canvasH);
           }
 
-          // 刷新された電子黒板を合成
           renderBlackboard(ctx, canvasW, canvasH);
-
           animFrameRef.current = requestAnimationFrame(renderLoop);
         };
 
@@ -509,7 +448,6 @@
         };
       }, [isStreaming, facingMode, photoOrientation, renderBlackboard]);
 
-      // シャッター撮影 ＆ kintone送信
       const handleShutter = async () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -529,13 +467,12 @@
         const updated = [photoRecord, ...recentPhotos];
         setRecentPhotos(updated);
         try {
-          localStorage.setItem('GH_PHOTO_HISTORY_V2', JSON.stringify(updated));
+          localStorage.setItem('GH_PHOTO_HISTORY_V3', JSON.stringify(updated));
         } catch(e) {}
 
         if (urlConfig.gasUrl) {
           setIsUploading(true);
           try {
-            // kintoneのPhotoTable定義書に完全に合致させたペイロード
             const payload = {
               action: "uploadCapturedPhoto",
               recordId: urlConfig.recordId,
@@ -544,14 +481,14 @@
                 projectCode: urlConfig.projectCode,
                 base64Image: dataUrl,
                 title: `No. ${blackboard.stage} - ${fullWorkCategory}`,
-                stage: blackboard.stage, // 施工前, 施工中, 施工完了, 材料・機材, 産業廃棄物
-                projectName: blackboard.projectName, // ① 件名
-                workCategory: fullWorkCategory, // ② 作業種目 (29種 / 内容)
-                location: blackboard.location, // ③ 撮影部位
-                spec: blackboard.spec, // ④ 寸法・規格
-                date: blackboard.date, // ⑤ 撮影年月日
-                contractor: blackboard.contractor, // ⑦ 立会者 / 施工者
-                notes: [blackboard.stageDetail, blackboard.notes].filter(Boolean).join(' / ') || '-' // ⑧ 特記事項
+                stage: blackboard.stage,
+                projectName: blackboard.projectName,
+                workCategory: fullWorkCategory,
+                location: blackboard.location,
+                spec: blackboard.spec,
+                date: blackboard.date,
+                constractor: blackboard.constractor,
+                notes: [blackboard.stageDetail, blackboard.notes].filter(Boolean).join(' / ') || '-'
               }
             };
 
@@ -576,13 +513,10 @@
         }
       };
 
-      // 選択中の業種情報
-      const currentIndustryObj = CONSTRUCTION_TYPES_29.find(c => c.name === blackboard.selectedIndustry) || CONSTRUCTION_TYPES_29[12]; // デフォルト: 舗装工事
+      const currentIndustryObj = CONSTRUCTION_TYPES_29.find(c => c.name === blackboard.selectedIndustry) || CONSTRUCTION_TYPES_29[12];
 
       return (
         <div className="max-w-md mx-auto min-h-screen bg-slate-950 flex flex-col justify-between pb-6">
-          
-          {/* ヘッダー */}
           <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-3.5 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${isStreaming ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
@@ -593,7 +527,6 @@
             </span>
           </header>
 
-          {/* 上部タブ */}
           <div className="bg-slate-900/80 border-b border-slate-800 px-2 py-1.5 flex items-center justify-around text-xs font-bold">
             <button
               onClick={() => setActiveTab('camera')}
@@ -615,7 +548,6 @@
             </button>
           </div>
 
-          {/* アラート */}
           {uploadSuccessAlert && (
             <div className="mx-3 mt-2 bg-emerald-950/95 border border-emerald-500 text-emerald-200 text-xs p-2.5 rounded-xl shadow-lg">
               {uploadSuccessAlert}
@@ -623,11 +555,7 @@
           )}
 
           <main className="flex-1 p-3 space-y-3">
-            
-            {/* 📷 撮影タブ */}
             <div className={activeTab === 'camera' ? 'space-y-3' : 'hidden'}>
-              
-              {/* コントロールバー */}
               <div className="flex items-center justify-between px-1 text-xs">
                 <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
                   <button
@@ -657,7 +585,6 @@
                 )}
               </div>
 
-              {/* ファインダー表示枠 */}
               <div className={`relative bg-black rounded-2xl overflow-hidden border-2 border-slate-800 w-full flex items-center justify-center shadow-2xl transition-all ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
                 <video
                   ref={videoRef}
@@ -694,7 +621,6 @@
                 )}
               </div>
 
-              {/* シャッターボタン */}
               <div className="pt-2">
                 <button
                   type="button"
@@ -718,7 +644,6 @@
               </div>
             </div>
 
-            {/* 📋 看板設定タブ（29種工種 ＆ 看板構成イメージ完全準拠） */}
             {activeTab === 'board' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3.5 text-xs max-h-[80vh] overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -726,7 +651,6 @@
                   <span className="text-[10px] text-slate-400">撮影手順書準拠</span>
                 </div>
 
-                {/* ① 工事名 */}
                 <div>
                   <label className="text-slate-300 font-bold block text-[11px] mb-1">工事名（ステップ①名称）</label>
                   <input
@@ -738,7 +662,6 @@
                   />
                 </div>
 
-                {/* ② 工種（建設業29種プルダウン ＋ 工事内容選択/自由記載） */}
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2.5">
                   <span className="text-amber-300 font-bold block text-[11px]">
                     工種（建設業29種 ＋ 工事内容）
@@ -801,23 +724,19 @@
                   </div>
                 </div>
 
-                {/* ③ 撮影場所 (測点) */}
                 <div>
                   <label className="text-slate-300 font-bold block text-[11px] mb-1">撮影場所 (測点)</label>
                   <input
                     type="text"
                     value={blackboard.location}
                     onChange={(e) => setBlackboard({ ...blackboard, location: e.target.value })}
-                    placeholder="例: 1F エントランス前 西側歩道 (No.2+5.0m)"
+                    placeholder="例: 1F エントランス前 西側歩道"
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
                   />
                 </div>
 
-                {/* ④ 施工状況 (内容) */}
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
                   <label className="text-amber-300 font-bold block text-[11px]">施工状況 (内容)</label>
-                  
-                  {/* 工程（ドロップダウン選択肢準拠） */}
                   <div className="grid grid-cols-3 gap-1">
                     {STAGE_OPTIONS.map(st => (
                       <button
@@ -831,20 +750,18 @@
                     ))}
                   </div>
 
-                  {/* 具体的な状態 */}
                   <div>
-                    <label className="text-slate-400 block text-[10px] mb-0.5">現場の具体的な状態（例: 機材搬入、埋戻し中など）</label>
+                    <label className="text-slate-400 block text-[10px] mb-0.5">現場の具体的な状態</label>
                     <input
                       type="text"
                       value={blackboard.stageDetail}
                       onChange={(e) => setBlackboard({ ...blackboard, stageDetail: e.target.value })}
-                      placeholder="例: ブロック仮撤去完了、砂埋め戻し・水締め"
+                      placeholder="例: ブロック仮撤去完了、砂埋め戻し"
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white"
                     />
                   </div>
                 </div>
 
-                {/* ⑤ 寸法・規格 */}
                 <div>
                   <label className="text-slate-300 font-bold block text-[11px] mb-1">寸法・規格</label>
                   <input
@@ -856,14 +773,13 @@
                   />
                 </div>
 
-                {/* ⑥ 施工業者名 ＆ 撮影日 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-slate-300 font-bold block text-[11px] mb-1">施工業者名</label>
+                    <label className="text-slate-300 font-bold block text-[11px] mb-1">施工者名</label>
                     <input
                       type="text"
-                      value={blackboard.contractor}
-                      onChange={(e) => setBlackboard({ ...blackboard, contractor: e.target.value })}
+                      value={blackboard.constractor}
+                      onChange={(e) => setBlackboard({ ...blackboard, constractor: e.target.value })}
                       placeholder="会社名"
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-[11px]"
                     />
@@ -879,7 +795,6 @@
                   </div>
                 </div>
 
-                {/* 特記事項 */}
                 <div>
                   <label className="text-slate-400 block text-[10px] mb-0.5">特記事項（任意）</label>
                   <input
@@ -901,7 +816,6 @@
               </div>
             )}
 
-            {/* 🖼️ 撮影済みタブ */}
             {activeTab === 'history' && (
               <div className="space-y-3">
                 <span className="text-xs font-bold text-white block">撮影済み写真 ({recentPhotos.length}枚)</span>
