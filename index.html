@@ -126,8 +126,11 @@
 
       // 撮影履歴（現在の工事案件に紐づく写真リスト）
       const [recentPhotos, setRecentPhotos] = useState([]);
-      // 履歴詳細確認用モーダルに表示する選択写真
+      // 履歴一覧からタップした写真の詳細確認モーダル用
       const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
+
+      // ★新機能: 撮影直後の確認プレビュー用の一時写真データ（撮り直し or 送信選択用）
+      const [pendingPhoto, setPendingPhoto] = useState(null);
 
       const videoRef = useRef(null);
       const canvasRef = useRef(null);
@@ -169,7 +172,7 @@
             const merged = {
               ...prev,
               ...loadedSettings,
-              date: getSystemDateYmd() // 撮影日付は常に最新システム日付
+              date: getSystemDateYmd()
             };
             if (pName && !loadedSettings.projectName) merged.projectName = decodeURIComponent(pName);
             if (cName && !loadedSettings.constractor) merged.constractor = decodeURIComponent(cName);
@@ -205,13 +208,12 @@
         } catch (e) {}
       }, []);
 
-      // 黒板設定・入力内容が変更されたらローカルストレージへ即時自動保存（リセット防止）
+      // 黒板設定・入力内容が変更されたらローカルストレージへ即時自動保存
       useEffect(() => {
         try {
           const sKey = getSettingsStorageKey(urlConfig.projectCode);
           localStorage.setItem(sKey, JSON.stringify(blackboard));
 
-          // 配色・透過度・サイズ等の共通表示設定
           const prefs = {
             theme: blackboard.theme,
             scale: blackboard.scale,
@@ -311,7 +313,7 @@
         ctx.restore();
       };
 
-      // 特記事項用：最大3行まで美しく折り返し・表示する描画関数（省略「…」防止）
+      // 特記事項用：最大3行まで美しく折り返し・表示する描画関数
       const drawThreeLineText = (ctx, text, x, startY, maxWidth, lineHeight, baseFontSize, color) => {
         if (!text) return;
         ctx.save();
@@ -322,11 +324,9 @@
         let fontSize = baseFontSize;
         ctx.font = `bold ${fontSize}px "Noto Sans JP", sans-serif`;
 
-        // 改行コードで分割
         const rawLines = String(text).split('\n');
         let processedLines = [];
 
-        // 長文の行を枠幅に合わせて自動改行
         for (let i = 0; i < rawLines.length; i++) {
           let line = rawLines[i];
           if (!line) {
@@ -349,10 +349,8 @@
           }
         }
 
-        // 最大3行までに制限
         const linesToDraw = processedLines.slice(0, 3);
 
-        // 3行を超える長文の場合のみ、3行目の末尾に「…」を付与
         if (processedLines.length > 3) {
           let lastLine = linesToDraw[2] || '';
           while (lastLine.length > 1 && ctx.measureText(lastLine + '…').width > maxWidth) {
@@ -361,7 +359,6 @@
           linesToDraw[2] = lastLine + '…';
         }
 
-        // 3行を描画
         linesToDraw.forEach((lineStr, lineIdx) => {
           let lineY = startY + (lineIdx * lineHeight);
           ctx.fillText(lineStr, x, lineY);
@@ -416,11 +413,10 @@
         ctx.fillStyle = innerBg;
         ctx.fillRect(innerX, innerY, innerW, innerH);
 
-        // 縦比率バランス（特記事項3行表示用）
-        const row1H = innerH * 0.15; // 工事名
-        const row2H = innerH * 0.15; // 工種
-        const bottomH = innerH * 0.14; // 施工会社・日付
-        const midH = innerH - (row1H + row2H + bottomH); // 中央領域
+        const row1H = innerH * 0.15;
+        const row2H = innerH * 0.15;
+        const bottomH = innerH * 0.14;
+        const midH = innerH - (row1H + row2H + bottomH);
 
         const colLabelW = Math.round(innerW * 0.23);
 
@@ -448,25 +444,21 @@
         drawFittedText(ctx, "工種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
         drawFittedText(ctx, fullWorkCategory, innerX + colLabelW + 8, innerY + row1H + row2H / 2, innerW - colLabelW - 14, Math.round(row2H * 0.40), textMain, 'left');
 
-        // 中央エリア：撮影場所・施工状況・特記事項（3行）
         const midStartY = innerY + row1H + row2H;
         const locH = midH * 0.22;
         const stgH = midH * 0.22;
         const notesTotalH = midH - (locH + stgH);
         const notesLineH = notesTotalH / 3;
 
-        // 1. 撮影場所
         const locY = midStartY + locH * 0.5;
         drawFittedText(ctx, "撮影場所:", innerX + 8, locY, colLabelW - 6, Math.round(locH * 0.44), textMain, 'left');
         drawFittedText(ctx, blackboard.location || '-', innerX + colLabelW + 4, locY, innerW - colLabelW - 10, Math.round(locH * 0.44), textMain, 'left');
 
-        // 2. 施工状況
         const stgY = midStartY + locH + stgH * 0.5;
         drawFittedText(ctx, "施工状況:", innerX + 8, stgY, colLabelW - 6, Math.round(stgH * 0.44), textMain, 'left');
         const stageText = `${blackboard.stage}${blackboard.stageDetail ? ' (' + blackboard.stageDetail + ')' : ''}`;
         drawFittedText(ctx, stageText, innerX + colLabelW + 4, stgY, innerW - colLabelW - 10, Math.round(stgH * 0.44), textSub, 'left');
 
-        // 3. 特記事項（3行表示）
         const notesStartY = midStartY + locH + stgH;
         const notesLabelY = notesStartY + notesLineH * 0.5;
         drawFittedText(ctx, "特記事項:", innerX + 8, notesLabelY, colLabelW - 6, Math.round(notesLineH * 0.44), textMain, 'left');
@@ -482,7 +474,6 @@
           textMain
         );
 
-        // 下部エリア：施工会社 & 撮影日
         const botStartY = innerY + innerH - bottomH;
         ctx.beginPath();
         ctx.moveTo(innerX, botStartY);
@@ -565,14 +556,13 @@
         };
       }, [isStreaming, facingMode, photoOrientation, renderBlackboard]);
 
-      const handleShutter = async () => {
+      // シャッター押下：即時送信せず、プレビュー確認画面（撮り直し or 送信）を表示
+      const handleShutter = () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
         const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
         const fullCategory = `${blackboard.workType29.replace(/^\d+\.\s*/, '')} / ${blackboard.workDetail}`;
-        
-        // 偽造防止：シャッター押下時のシステム日付（YYYY-MM-DD）
         const shootingDateYmd = getSystemDateYmd();
 
         const photoRecord = {
@@ -590,20 +580,29 @@
           capturedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
         };
 
-        // 案件ごとのストレージキーに直近15枚を上限として安全に保持（容量圧迫防止）
+        // プレビュー確認状態へセット（kintone未送信状態）
+        setPendingPhoto(photoRecord);
+      };
+
+      // プレビュー確認後の「送信」実行処理
+      const handleConfirmUpload = async () => {
+        if (!pendingPhoto) return;
+
+        // 1. 案件ごとのローカル履歴に直近15枚を上限として保持
         const key = getHistoryStorageKey(urlConfig.projectCode);
-        const updated = [photoRecord, ...recentPhotos].slice(0, 15);
+        const updated = [pendingPhoto, ...recentPhotos].slice(0, 15);
         setRecentPhotos(updated);
         try {
           localStorage.setItem(key, JSON.stringify(updated));
         } catch(e) {
           try {
-            const trimmed = [photoRecord, ...recentPhotos].slice(0, 5);
+            const trimmed = [pendingPhoto, ...recentPhotos].slice(0, 5);
             localStorage.setItem(key, JSON.stringify(trimmed));
             setRecentPhotos(trimmed);
           } catch(err2) {}
         }
 
+        // 2. kintoneへ送信
         if (urlConfig.gasUrl) {
           setIsUploading(true);
           try {
@@ -613,15 +612,15 @@
               photoData: {
                 photoNo: Date.now(),
                 projectCode: urlConfig.projectCode,
-                base64Image: dataUrl,
-                stage: blackboard.stage,
-                workCategory: fullCategory,
-                location: blackboard.location,
-                spec: blackboard.specAndNotes,
-                projectName: blackboard.projectName,
-                constractor: blackboard.constractor,
-                notes: blackboard.specAndNotes,
-                date: shootingDateYmd
+                base64Image: pendingPhoto.url,
+                stage: pendingPhoto.stage,
+                workCategory: pendingPhoto.workCategory,
+                location: pendingPhoto.location,
+                spec: pendingPhoto.specAndNotes,
+                projectName: pendingPhoto.projectName,
+                constractor: pendingPhoto.constractor,
+                notes: pendingPhoto.specAndNotes,
+                date: pendingPhoto.date
               }
             };
 
@@ -633,16 +632,23 @@
             });
 
             setIsUploading(false);
-            setUploadSuccessAlert('送信完了');
+            setPendingPhoto(null);
+            setUploadSuccessAlert('kintoneへ送信完了しました');
             setTimeout(() => setUploadSuccessAlert(null), 3000);
           } catch(err) {
             setIsUploading(false);
             alert('送信エラー: ' + err.message);
           }
         } else {
-          setUploadSuccessAlert('保存完了');
+          setPendingPhoto(null);
+          setUploadSuccessAlert('保存完了 (ローカル)');
           setTimeout(() => setUploadSuccessAlert(null), 2500);
         }
+      };
+
+      // プレビュー確認後の「撮り直し」実行処理
+      const handleRetake = () => {
+        setPendingPhoto(null);
       };
 
       // 端末履歴の手動消去
@@ -977,11 +983,10 @@
               <div className="pt-2">
                 <button
                   type="button"
-                  disabled={isUploading}
                   onClick={handleShutter}
                   className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold py-3.5 rounded-2xl text-base shadow-lg transition-all border border-amber-300 cursor-pointer"
                 >
-                  {isUploading ? "送信中..." : "撮影"}
+                  撮影
                 </button>
               </div>
             </div>
@@ -1039,6 +1044,83 @@
             )}
 
           </main>
+
+          {/* ★新機能: 撮影直後の確認プレビューモーダル（撮り直し or kintone送信） */}
+          {pendingPhoto && (
+            <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col justify-between p-3.5 overflow-y-auto">
+              <div className="max-w-md w-full mx-auto flex flex-col justify-between h-full space-y-3">
+                
+                {/* プレビュー上部ヘッダー */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                      撮影プレビュー確認
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">写真のピントや黒板文字をご確認ください</p>
+                  </div>
+                  <span className="text-[11px] font-mono text-amber-300 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded">
+                    {pendingPhoto.stage}
+                  </span>
+                </div>
+
+                {/* 撮影画像プレビュー表示 */}
+                <div className="w-full flex-1 flex items-center justify-center min-h-0 py-1">
+                  <div className={`w-full max-h-[58vh] bg-black rounded-xl overflow-hidden border border-slate-700 shadow-2xl flex items-center justify-center ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
+                    <img
+                      src={pendingPhoto.url}
+                      alt="撮影プレビュー"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+
+                {/* 撮影情報の簡易サマリー */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-slate-400">工種 / 作業種目:</span>
+                    <span className="text-slate-200 font-medium truncate max-w-[220px]">{pendingPhoto.workCategory || '-'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-slate-400">撮影部位:</span>
+                    <span className="text-slate-200 truncate max-w-[220px]">{pendingPhoto.location || '-'}</span>
+                  </div>
+                  {pendingPhoto.specAndNotes && (
+                    <div className="pt-1 border-t border-slate-800 text-[10px] text-slate-300 whitespace-pre-wrap line-clamp-2">
+                      {pendingPhoto.specAndNotes}
+                    </div>
+                  )}
+                </div>
+
+                {/* 操作アクションボタン：撮り直す vs kintoneに送信 */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <button
+                    type="button"
+                    disabled={isUploading}
+                    onClick={handleRetake}
+                    className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold py-3 rounded-xl text-xs transition border border-slate-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <span>✕</span> 撮り直す
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isUploading}
+                    onClick={handleConfirmUpload}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold py-3 rounded-xl text-xs transition shadow-lg shadow-emerald-950/50 border border-emerald-400/50 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    {isUploading ? (
+                      <span>送信中...</span>
+                    ) : (
+                      <>
+                        <span>✓</span> kintoneに送信
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
 
           {/* 履歴写真の拡大＆作業情報詳細確認モーダル */}
           {selectedPhotoModal && (
