@@ -55,6 +55,11 @@
       return `${y}-${m}-${d}`;
     };
 
+    // 工事コードごとのストレージキー（案件ごとに履歴を分離）
+    const getStorageKey = (pCode) => {
+      return pCode ? `FIELD_PHOTO_HISTORY_${pCode}` : 'FIELD_PHOTO_HISTORY_DEFAULT';
+    };
+
     function MobileCameraApp() {
       const [activeTab, setActiveTab] = useState('board');
       const [isStreaming, setIsStreaming] = useState(false);
@@ -87,18 +92,28 @@
         position: 'bottom-right'
       });
 
-      const [recentPhotos, setRecentPhotos] = useState(() => {
-        try {
-          const s = localStorage.getItem('FIELD_PHOTO_HISTORY');
-          if (s) return JSON.parse(s);
-        } catch (e) {}
-        return [];
-      });
+      // 現在の工事コードに紐づく撮影履歴
+      const [recentPhotos, setRecentPhotos] = useState([]);
+      // 拡大確認用モーダルに表示する選択写真
+      const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
 
       const videoRef = useRef(null);
       const canvasRef = useRef(null);
       const streamRef = useRef(null);
       const animFrameRef = useRef(null);
+
+      // 工事案件に紐づく履歴の読み込み
+      const loadHistoryForProject = (pCode) => {
+        try {
+          const key = getStorageKey(pCode);
+          const saved = localStorage.getItem(key);
+          if (saved) {
+            setRecentPhotos(JSON.parse(saved));
+            return;
+          }
+        } catch (e) {}
+        setRecentPhotos([]);
+      };
 
       useEffect(() => {
         try {
@@ -108,6 +123,7 @@
           const projectCode = p.get('projectCode') || '';
 
           setUrlConfig({ gasUrl, recordId, projectCode });
+          loadHistoryForProject(projectCode);
 
           const pName = p.get('projectName');
           const cName = p.get('constractor') || p.get('contractor');
@@ -482,17 +498,32 @@
         const photoRecord = {
           id: 'photo_' + Date.now(),
           url: dataUrl,
-          stage: blackboard.stage,
+          projectCode: urlConfig.projectCode,
+          projectName: blackboard.projectName,
           workCategory: fullCategory,
           location: blackboard.location,
+          stage: blackboard.stage,
+          stageDetail: blackboard.stageDetail,
+          specAndNotes: blackboard.specAndNotes,
+          constractor: blackboard.constractor,
+          date: shootingDateYmd,
           capturedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
         };
 
-        const updated = [photoRecord, ...recentPhotos];
+        // 案件ごとのストレージキーに直近15枚を上限として安全に保持（容量圧迫防止）
+        const key = getStorageKey(urlConfig.projectCode);
+        const updated = [photoRecord, ...recentPhotos].slice(0, 15);
         setRecentPhotos(updated);
         try {
-          localStorage.setItem('FIELD_PHOTO_HISTORY', JSON.stringify(updated));
-        } catch(e) {}
+          localStorage.setItem(key, JSON.stringify(updated));
+        } catch(e) {
+          try {
+            // 容量上限時のフォールバック（直近5枚に絞る）
+            const trimmed = [photoRecord, ...recentPhotos].slice(0, 5);
+            localStorage.setItem(key, JSON.stringify(trimmed));
+            setRecentPhotos(trimmed);
+          } catch(err2) {}
+        }
 
         if (urlConfig.gasUrl) {
           setIsUploading(true);
@@ -511,7 +542,7 @@
                 projectName: blackboard.projectName,
                 constractor: blackboard.constractor,
                 notes: blackboard.specAndNotes,
-                date: shootingDateYmd // kintoneのBbDateへYYYY-MM-DDで送信
+                date: shootingDateYmd
               }
             };
 
@@ -532,6 +563,17 @@
         } else {
           setUploadSuccessAlert('保存完了');
           setTimeout(() => setUploadSuccessAlert(null), 2500);
+        }
+      };
+
+      // 端末履歴の手動消去
+      const handleClearHistory = () => {
+        if (confirm("この端末に一時保存されている撮影履歴を消去しますか？\n※kintoneに送信済みの写真は消えません。")) {
+          const key = getStorageKey(urlConfig.projectCode);
+          try {
+            localStorage.removeItem(key);
+          } catch(e) {}
+          setRecentPhotos([]);
         }
       };
 
@@ -856,22 +898,50 @@
               </div>
             </div>
 
+            {/* 撮影履歴タブ */}
             {activeTab === 'history' && (
               <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-300 block">撮影履歴 ({recentPhotos.length})</span>
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div>
+                    <span className="text-xs font-bold text-slate-200 block">撮影履歴 ({recentPhotos.length}件)</span>
+                    <span className="text-[10px] text-slate-400">カードをタップすると写真と詳細を拡大表示</span>
+                  </div>
+                  {recentPhotos.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearHistory}
+                      className="text-[11px] text-rose-400 hover:text-rose-300 bg-rose-950/40 border border-rose-900/50 px-2.5 py-1 rounded-lg transition"
+                    >
+                      履歴消去
+                    </button>
+                  )}
+                </div>
+
                 {recentPhotos.length === 0 ? (
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
-                    撮影された写真はまだありません
+                    この工事で撮影された写真はまだありません
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2.5">
                     {recentPhotos.map(p => (
-                      <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden p-1">
-                        <img src={p.url} alt="写真" className="w-full aspect-[4/3] object-cover rounded" />
-                        <div className="p-1 text-[10px]">
-                          <span className="text-amber-400 font-bold">{p.stage}</span>
-                          <p className="text-slate-300 truncate">{p.workCategory}</p>
-                          <p className="text-slate-500">{p.capturedAt}</p>
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedPhotoModal(p)}
+                        className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden p-2 cursor-pointer hover:border-amber-500/50 transition active:scale-[0.98] space-y-1.5"
+                      >
+                        <div className="relative aspect-[4/3] bg-black rounded-lg overflow-hidden flex items-center justify-center">
+                          <img src={p.url} alt="写真" className="w-full h-full object-cover" />
+                          <span className="absolute bottom-1 right-1 bg-slate-900/80 text-[9px] px-1.5 py-0.5 rounded text-slate-300">
+                            拡大
+                          </span>
+                        </div>
+                        <div className="text-[11px] space-y-0.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-amber-400 font-bold text-xs">{p.stage}</span>
+                            <span className="text-slate-500 text-[10px]">{p.capturedAt}</span>
+                          </div>
+                          <p className="text-slate-200 font-medium truncate">{p.workCategory || '-'}</p>
+                          <p className="text-slate-400 text-[10px] truncate">{p.location || '-'}</p>
                         </div>
                       </div>
                     ))}
@@ -881,6 +951,89 @@
             )}
 
           </main>
+
+          {/* 履歴写真の拡大＆作業情報詳細確認モーダル */}
+          {selectedPhotoModal && (
+            <div
+              className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex flex-col justify-between p-4 overflow-y-auto"
+              onClick={() => setSelectedPhotoModal(null)}
+            >
+              <div
+                className="max-w-md w-full mx-auto bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl space-y-4 my-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-3 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-white">写真詳細確認</span>
+                    <span className="text-[10px] bg-emerald-950 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded">
+                      kintone送信済
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPhotoModal(null)}
+                    className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white rounded-lg bg-slate-700 text-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="px-3">
+                  <div className="w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+                    <img
+                      src={selectedPhotoModal.url}
+                      alt="拡大写真"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                </div>
+
+                <div className="px-4 pb-4 space-y-3 text-xs">
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <div className="flex justify-between items-baseline border-b border-slate-900 pb-1.5">
+                      <span className="text-slate-400 text-[11px]">工事名</span>
+                      <span className="font-bold text-white text-right truncate max-w-[200px]">{selectedPhotoModal.projectName || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline border-b border-slate-900 pb-1.5">
+                      <span className="text-slate-400 text-[11px]">施工工程</span>
+                      <span className="font-bold text-amber-400">{selectedPhotoModal.stage} {selectedPhotoModal.stageDetail ? `(${selectedPhotoModal.stageDetail})` : ''}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline border-b border-slate-900 pb-1.5">
+                      <span className="text-slate-400 text-[11px]">工種 / 作業種目</span>
+                      <span className="text-slate-200 font-medium text-right">{selectedPhotoModal.workCategory || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline border-b border-slate-900 pb-1.5">
+                      <span className="text-slate-400 text-[11px]">撮影部位</span>
+                      <span className="text-slate-200 text-right">{selectedPhotoModal.location || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline border-b border-slate-900 pb-1.5">
+                      <span className="text-slate-400 text-[11px]">撮影日時</span>
+                      <span className="text-slate-200 font-mono">{selectedPhotoModal.date || '-'} {selectedPhotoModal.capturedAt || ''}</span>
+                    </div>
+                    <div className="border-b border-slate-900 pb-1.5">
+                      <span className="text-slate-400 text-[11px] block mb-1">特記事項</span>
+                      <p className="text-slate-200 whitespace-pre-wrap leading-relaxed text-[11px] bg-slate-900/60 p-2 rounded-lg">
+                        {selectedPhotoModal.specAndNotes || '-'}
+                      </p>
+                    </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-slate-400 text-[11px]">施工会社</span>
+                      <span className="text-slate-300 text-right">{selectedPhotoModal.constractor || '-'}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPhotoModal(null)}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-2.5 rounded-xl transition text-xs"
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       );
     }
