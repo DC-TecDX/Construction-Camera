@@ -46,6 +46,15 @@
       { id: '産業廃棄物', label: '発生材' }
     ];
 
+    // JSTシステム日付 (YYYY-MM-DD)
+    const getSystemDateYmd = () => {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
     function MobileCameraApp() {
       const [activeTab, setActiveTab] = useState('board');
       const [isStreaming, setIsStreaming] = useState(false);
@@ -65,13 +74,13 @@
       const [blackboard, setBlackboard] = useState({
         projectName: '工事記録写真',
         workType29: '13. 舗装工事',
-        workDetail: 'インターロッキングブロック敷設',
-        location: 'エントランス前 歩道',
+        workDetail: '舗装打換え工',
+        location: '西側歩道 A区画',
         stage: '施工中',
-        stageDetail: '敷設中',
-        specAndNotes: '寸法: L=3.5m, 段差=25mm\n路盤整正完了・目地砂充填確認',
-        constractor: '東都建設工業株式会社',
-        date: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+        stageDetail: '路盤整正',
+        specAndNotes: 'アスファルト舗装 t=50mm\n路面クラック修繕確認',
+        constractor: '施工会社',
+        date: getSystemDateYmd(),
         theme: 'green',
         scale: 0.44,
         opacity: 1.0,
@@ -109,7 +118,8 @@
               ...prev,
               projectName: pName ? decodeURIComponent(pName) : prev.projectName,
               constractor: cName ? decodeURIComponent(cName) : prev.constractor,
-              location: loc ? decodeURIComponent(loc) : prev.location
+              location: loc ? decodeURIComponent(loc) : prev.location,
+              date: getSystemDateYmd()
             }));
           }
 
@@ -127,7 +137,8 @@
                   ...prev,
                   projectName: rec.ProjectName?.value || prev.projectName,
                   constractor: rec.ConstractorName?.value || prev.constractor,
-                  location: rec.WorkLocation?.value || prev.location
+                  location: rec.WorkLocation?.value || prev.location,
+                  date: getSystemDateYmd()
                 }));
               }
             })
@@ -144,7 +155,7 @@
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setStreamError('カメラ機能に対応していません。');
+          setStreamError('カメラ機能に対応していません');
           return;
         }
 
@@ -163,7 +174,7 @@
         }
 
         if (!activeStream) {
-          setStreamError('カメラを起動できませんでした。アクセス許可を確認してください。');
+          setStreamError('カメラを起動できませんでした。アクセス許可を確認してください');
           setIsStreaming(false);
           return;
         }
@@ -383,7 +394,10 @@
 
         const botCenterY = botStartY + bottomH / 2;
         drawFittedText(ctx, blackboard.constractor || '', innerX + 10, botCenterY, innerW * 0.60, Math.round(bottomH * 0.42), textMain, 'left');
-        drawFittedText(ctx, blackboard.date, innerX + innerW - 10, botCenterY, innerW * 0.35, Math.round(bottomH * 0.42), textMain, 'right');
+        
+        // 黒板上の日付表示（システム自動日付 YYYY.MM.DD）
+        const displayDate = (blackboard.date || getSystemDateYmd()).replace(/-/g, '.');
+        drawFittedText(ctx, displayDate, innerX + innerW - 10, botCenterY, innerW * 0.35, Math.round(bottomH * 0.42), textMain, 'right');
 
         ctx.restore();
       }, [blackboard]);
@@ -461,6 +475,9 @@
 
         const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
         const fullCategory = `${blackboard.workType29.replace(/^\d+\.\s*/, '')} / ${blackboard.workDetail}`;
+        
+        // 偽造防止：シャッター押下時のシステム日付（YYYY-MM-DD）
+        const shootingDateYmd = getSystemDateYmd();
 
         const photoRecord = {
           id: 'photo_' + Date.now(),
@@ -494,7 +511,7 @@
                 projectName: blackboard.projectName,
                 constractor: blackboard.constractor,
                 notes: blackboard.specAndNotes,
-                date: blackboard.date
+                date: shootingDateYmd // kintoneのBbDateへYYYY-MM-DDで送信
               }
             };
 
@@ -588,7 +605,7 @@
 
                   <div className="space-y-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
                     <div>
-                      <label className="text-slate-400 block text-[11px] mb-1">業種</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">工種</label>
                       <select
                         value={blackboard.workType29}
                         onChange={(e) => setBlackboard({ ...blackboard, workType29: e.target.value })}
@@ -600,10 +617,10 @@
                       </select>
                     </div>
                     <div>
-                      <label className="text-slate-400 block text-[11px] mb-1">作業内容</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">作業種目</label>
                       <input
                         type="text"
-                        placeholder="例: 配線工事 / インターロッキング敷設"
+                        placeholder="例: 舗装打換え工"
                         value={blackboard.workDetail}
                         onChange={(e) => setBlackboard({ ...blackboard, workDetail: e.target.value })}
                         className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white outline-none"
@@ -612,10 +629,10 @@
                   </div>
 
                   <div>
-                    <label className="text-slate-400 block text-[11px] mb-1">撮影場所</label>
+                    <label className="text-slate-400 block text-[11px] mb-1">撮影部位</label>
                     <input
                       type="text"
-                      placeholder="例: 1F エントランス前 歩道"
+                      placeholder="例: 西側歩道 A区画"
                       value={blackboard.location}
                       onChange={(e) => setBlackboard({ ...blackboard, location: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none"
@@ -638,7 +655,7 @@
                     </div>
                     <input
                       type="text"
-                      placeholder="詳細状況 (例: 掘削完了・敷設作業中)"
+                      placeholder="詳細状況 (例: 路盤整正・転圧中)"
                       value={blackboard.stageDetail}
                       onChange={(e) => setBlackboard({ ...blackboard, stageDetail: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none"
