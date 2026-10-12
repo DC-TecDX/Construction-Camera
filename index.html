@@ -55,10 +55,16 @@
       return `${y}-${m}-${d}`;
     };
 
-    // 工事コードごとのストレージキー（案件ごとに履歴を分離）
-    const getStorageKey = (pCode) => {
+    // 工事コードごとのストレージキー（案件ごとに履歴および黒板設定を完全分離）
+    const getHistoryStorageKey = (pCode) => {
       return pCode ? `FIELD_PHOTO_HISTORY_${pCode}` : 'FIELD_PHOTO_HISTORY_DEFAULT';
     };
+
+    const getSettingsStorageKey = (pCode) => {
+      return pCode ? `FIELD_BB_SETTINGS_${pCode}` : 'FIELD_BB_SETTINGS_DEFAULT';
+    };
+
+    const PREFS_STORAGE_KEY = 'FIELD_CAMERA_PREFERENCES';
 
     function MobileCameraApp() {
       const [activeTab, setActiveTab] = useState('board');
@@ -68,7 +74,17 @@
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
 
-      const [photoOrientation, setPhotoOrientation] = useState('landscape');
+      // 撮影向き設定（永続化）
+      const [photoOrientation, setPhotoOrientation] = useState(() => {
+        try {
+          const pref = localStorage.getItem(PREFS_STORAGE_KEY);
+          if (pref) {
+            const p = JSON.parse(pref);
+            if (p.photoOrientation) return p.photoOrientation;
+          }
+        } catch (e) {}
+        return 'landscape';
+      });
 
       const [urlConfig, setUrlConfig] = useState({
         gasUrl: '',
@@ -76,25 +92,41 @@
         projectCode: ''
       });
 
-      const [blackboard, setBlackboard] = useState({
-        projectName: '工事記録写真',
-        workType29: '13. 舗装工事',
-        workDetail: '舗装打換え工',
-        location: '西側歩道 A区画',
-        stage: '施工中',
-        stageDetail: '路盤整正',
-        specAndNotes: 'アスファルト舗装 t=50mm\n路面クラック修繕確認',
-        constractor: '施工会社',
-        date: getSystemDateYmd(),
-        theme: 'green',
-        scale: 0.44,
-        opacity: 1.0,
-        position: 'bottom-right'
+      // 黒板初期値（端末ローカル保持 + デフォルト値）
+      const [blackboard, setBlackboard] = useState(() => {
+        let base = {
+          projectName: '工事記録写真',
+          workType29: '13. 舗装工事',
+          workDetail: '舗装打換え工',
+          location: '西側歩道 A区画',
+          stage: '施工中',
+          stageDetail: '路盤整正',
+          specAndNotes: 'アスファルト舗装 t=50mm\n路面クラック修繕確認\n規定密度転圧完了',
+          constractor: '施工会社',
+          date: getSystemDateYmd(),
+          theme: 'green',
+          scale: 0.44,
+          opacity: 1.0,
+          position: 'bottom-right'
+        };
+
+        try {
+          const pref = localStorage.getItem(PREFS_STORAGE_KEY);
+          if (pref) {
+            const p = JSON.parse(pref);
+            if (p.theme) base.theme = p.theme;
+            if (p.scale) base.scale = p.scale;
+            if (p.opacity) base.opacity = p.opacity;
+            if (p.position) base.position = p.position;
+          }
+        } catch (e) {}
+
+        return base;
       });
 
-      // 現在の工事コードに紐づく撮影履歴
+      // 撮影履歴（現在の工事案件に紐づく写真リスト）
       const [recentPhotos, setRecentPhotos] = useState([]);
-      // 拡大確認用モーダルに表示する選択写真
+      // 履歴詳細確認用モーダルに表示する選択写真
       const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
 
       const videoRef = useRef(null);
@@ -102,19 +134,7 @@
       const streamRef = useRef(null);
       const animFrameRef = useRef(null);
 
-      // 工事案件に紐づく履歴の読み込み
-      const loadHistoryForProject = (pCode) => {
-        try {
-          const key = getStorageKey(pCode);
-          const saved = localStorage.getItem(key);
-          if (saved) {
-            setRecentPhotos(JSON.parse(saved));
-            return;
-          }
-        } catch (e) {}
-        setRecentPhotos([]);
-      };
-
+      // 初回起動時のURL解析および設定復元
       useEffect(() => {
         try {
           const p = new URLSearchParams(window.location.search);
@@ -123,22 +143,41 @@
           const projectCode = p.get('projectCode') || '';
 
           setUrlConfig({ gasUrl, recordId, projectCode });
-          loadHistoryForProject(projectCode);
+
+          // 1. 案件専用履歴の読み込み
+          const hKey = getHistoryStorageKey(projectCode);
+          const savedHistory = localStorage.getItem(hKey);
+          if (savedHistory) {
+            try { setRecentPhotos(JSON.parse(savedHistory)); } catch (e) {}
+          } else {
+            setRecentPhotos([]);
+          }
+
+          // 2. 案件専用黒板設定の復元（ブラウザ再起動時のリセット防止）
+          const sKey = getSettingsStorageKey(projectCode);
+          const savedSettings = localStorage.getItem(sKey);
+          let loadedSettings = {};
+          if (savedSettings) {
+            try { loadedSettings = JSON.parse(savedSettings); } catch (e) {}
+          }
 
           const pName = p.get('projectName');
           const cName = p.get('constractor') || p.get('contractor');
           const loc = p.get('location');
 
-          if (pName || cName || loc) {
-            setBlackboard(prev => ({
+          setBlackboard(prev => {
+            const merged = {
               ...prev,
-              projectName: pName ? decodeURIComponent(pName) : prev.projectName,
-              constractor: cName ? decodeURIComponent(cName) : prev.constractor,
-              location: loc ? decodeURIComponent(loc) : prev.location,
-              date: getSystemDateYmd()
-            }));
-          }
+              ...loadedSettings,
+              date: getSystemDateYmd() // 撮影日付は常に最新システム日付
+            };
+            if (pName && !loadedSettings.projectName) merged.projectName = decodeURIComponent(pName);
+            if (cName && !loadedSettings.constractor) merged.constractor = decodeURIComponent(cName);
+            if (loc && !loadedSettings.location) merged.location = decodeURIComponent(loc);
+            return merged;
+          });
 
+          // kintone詳細取得による最新マスタ補完
           if (gasUrl && recordId) {
             fetch(gasUrl, {
               method: 'POST',
@@ -149,19 +188,40 @@
             .then(data => {
               if (data && data.record) {
                 const rec = data.record;
-                setBlackboard(prev => ({
-                  ...prev,
-                  projectName: rec.ProjectName?.value || prev.projectName,
-                  constractor: rec.ConstractorName?.value || prev.constractor,
-                  location: rec.WorkLocation?.value || prev.location,
-                  date: getSystemDateYmd()
-                }));
+                setBlackboard(prev => {
+                  const updated = {
+                    ...prev,
+                    projectName: rec.ProjectName?.value || prev.projectName,
+                    constractor: rec.ConstractorName?.value || prev.constractor,
+                    location: prev.location || rec.WorkLocation?.value || '',
+                    date: getSystemDateYmd()
+                  };
+                  return updated;
+                });
               }
             })
             .catch(() => {});
           }
         } catch (e) {}
       }, []);
+
+      // 黒板設定・入力内容が変更されたらローカルストレージへ即時自動保存（リセット防止）
+      useEffect(() => {
+        try {
+          const sKey = getSettingsStorageKey(urlConfig.projectCode);
+          localStorage.setItem(sKey, JSON.stringify(blackboard));
+
+          // 配色・透過度・サイズ等の共通表示設定
+          const prefs = {
+            theme: blackboard.theme,
+            scale: blackboard.scale,
+            opacity: blackboard.opacity,
+            position: blackboard.position,
+            photoOrientation: photoOrientation
+          };
+          localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs));
+        } catch (e) {}
+      }, [blackboard, photoOrientation, urlConfig.projectCode]);
 
       const startCamera = async (targetFacing = facingMode) => {
         setStreamError(null);
@@ -251,7 +311,8 @@
         ctx.restore();
       };
 
-      const drawTwoLineText = (ctx, text, x, startY, maxWidth, lineHeight, baseFontSize, color) => {
+      // 特記事項用：最大3行まで美しく折り返し・表示する描画関数（省略「…」防止）
+      const drawThreeLineText = (ctx, text, x, startY, maxWidth, lineHeight, baseFontSize, color) => {
         if (!text) return;
         ctx.save();
         ctx.fillStyle = color;
@@ -261,35 +322,49 @@
         let fontSize = baseFontSize;
         ctx.font = `bold ${fontSize}px "Noto Sans JP", sans-serif`;
 
-        let lines = text.split('\n').filter(Boolean);
-        if (lines.length > 2) {
-          lines = [lines[0], lines.slice(1).join(' ')];
-        }
+        // 改行コードで分割
+        const rawLines = String(text).split('\n');
+        let processedLines = [];
 
-        if (lines.length === 1) {
-          const fullText = lines[0];
-          if (ctx.measureText(fullText).width > maxWidth) {
-            let splitIndex = Math.floor(fullText.length / 2);
-            for (let i = 1; i < fullText.length; i++) {
-              if (ctx.measureText(fullText.slice(0, i)).width > maxWidth - 10) {
-                splitIndex = Math.max(1, i - 1);
-                break;
+        // 長文の行を枠幅に合わせて自動改行
+        for (let i = 0; i < rawLines.length; i++) {
+          let line = rawLines[i];
+          if (!line) {
+            if (processedLines.length < 3) processedLines.push('');
+            continue;
+          }
+
+          while (line.length > 0) {
+            if (ctx.measureText(line).width <= maxWidth) {
+              processedLines.push(line);
+              break;
+            } else {
+              let cutIndex = line.length - 1;
+              while (cutIndex > 1 && ctx.measureText(line.slice(0, cutIndex)).width > maxWidth) {
+                cutIndex--;
               }
+              processedLines.push(line.slice(0, cutIndex));
+              line = line.slice(cutIndex);
             }
-            lines = [fullText.slice(0, splitIndex), fullText.slice(splitIndex)];
           }
         }
 
-        lines.slice(0, 2).forEach((lineStr, lineIdx) => {
-          let lineY = startY + (lineIdx * lineHeight);
-          let currentStr = lineStr;
-          if (ctx.measureText(currentStr).width > maxWidth) {
-            while (currentStr.length > 1 && ctx.measureText(currentStr + '…').width > maxWidth) {
-              currentStr = currentStr.slice(0, -1);
-            }
-            currentStr += '…';
+        // 最大3行までに制限
+        const linesToDraw = processedLines.slice(0, 3);
+
+        // 3行を超える長文の場合のみ、3行目の末尾に「…」を付与
+        if (processedLines.length > 3) {
+          let lastLine = linesToDraw[2] || '';
+          while (lastLine.length > 1 && ctx.measureText(lastLine + '…').width > maxWidth) {
+            lastLine = lastLine.slice(0, -1);
           }
-          ctx.fillText(currentStr, x, lineY);
+          linesToDraw[2] = lastLine + '…';
+        }
+
+        // 3行を描画
+        linesToDraw.forEach((lineStr, lineIdx) => {
+          let lineY = startY + (lineIdx * lineHeight);
+          ctx.fillText(lineStr, x, lineY);
         });
 
         ctx.restore();
@@ -341,10 +416,11 @@
         ctx.fillStyle = innerBg;
         ctx.fillRect(innerX, innerY, innerW, innerH);
 
-        const row1H = innerH * 0.16;
-        const row2H = innerH * 0.16;
-        const bottomH = innerH * 0.15;
-        const midH = innerH - (row1H + row2H + bottomH);
+        // 縦比率バランス（特記事項3行表示用）
+        const row1H = innerH * 0.15; // 工事名
+        const row2H = innerH * 0.15; // 工種
+        const bottomH = innerH * 0.14; // 施工会社・日付
+        const midH = innerH - (row1H + row2H + bottomH); // 中央領域
 
         const colLabelW = Math.round(innerW * 0.23);
 
@@ -372,36 +448,41 @@
         drawFittedText(ctx, "工種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
         drawFittedText(ctx, fullWorkCategory, innerX + colLabelW + 8, innerY + row1H + row2H / 2, innerW - colLabelW - 14, Math.round(row2H * 0.40), textMain, 'left');
 
+        // 中央エリア：撮影場所・施工状況・特記事項（3行）
         const midStartY = innerY + row1H + row2H;
-        const lineUnitH = midH / 4;
+        const locH = midH * 0.22;
+        const stgH = midH * 0.22;
+        const notesTotalH = midH - (locH + stgH);
+        const notesLineH = notesTotalH / 3;
 
-        const locY = midStartY + lineUnitH * 0.5;
-        drawFittedText(ctx, "撮影場所:", innerX + 8, locY, colLabelW, Math.round(lineUnitH * 0.44), textMain, 'left');
-        drawFittedText(ctx, blackboard.location || '-', innerX + colLabelW + 4, locY, innerW - colLabelW - 10, Math.round(lineUnitH * 0.44), textMain, 'left');
+        // 1. 撮影場所
+        const locY = midStartY + locH * 0.5;
+        drawFittedText(ctx, "撮影場所:", innerX + 8, locY, colLabelW - 6, Math.round(locH * 0.44), textMain, 'left');
+        drawFittedText(ctx, blackboard.location || '-', innerX + colLabelW + 4, locY, innerW - colLabelW - 10, Math.round(locH * 0.44), textMain, 'left');
 
-        const stgY = midStartY + lineUnitH * 1.5;
-        drawFittedText(ctx, "施工状況:", innerX + 8, stgY, colLabelW, Math.round(lineUnitH * 0.44), textMain, 'left');
-        const stageText = `${blackboard.stage} (${blackboard.stageDetail})`;
-        drawFittedText(ctx, stageText, innerX + colLabelW + 4, stgY, innerW - colLabelW - 10, Math.round(lineUnitH * 0.44), textSub, 'left');
+        // 2. 施工状況
+        const stgY = midStartY + locH + stgH * 0.5;
+        drawFittedText(ctx, "施工状況:", innerX + 8, stgY, colLabelW - 6, Math.round(stgH * 0.44), textMain, 'left');
+        const stageText = `${blackboard.stage}${blackboard.stageDetail ? ' (' + blackboard.stageDetail + ')' : ''}`;
+        drawFittedText(ctx, stageText, innerX + colLabelW + 4, stgY, innerW - colLabelW - 10, Math.round(stgH * 0.44), textSub, 'left');
 
-        const notesLabelY = midStartY + lineUnitH * 2.5;
-        drawFittedText(ctx, "特記事項:", innerX + 8, notesLabelY, colLabelW, Math.round(lineUnitH * 0.44), textMain, 'left');
+        // 3. 特記事項（3行表示）
+        const notesStartY = midStartY + locH + stgH;
+        const notesLabelY = notesStartY + notesLineH * 0.5;
+        drawFittedText(ctx, "特記事項:", innerX + 8, notesLabelY, colLabelW - 6, Math.round(notesLineH * 0.44), textMain, 'left');
 
-        const notesLine1Y = midStartY + lineUnitH * 2.5;
-        const notesLineHeight = lineUnitH * 0.90;
-        const notesFontSize = Math.max(9, Math.round(lineUnitH * 0.42));
-
-        drawTwoLineText(
+        drawThreeLineText(
           ctx,
           blackboard.specAndNotes || '-',
           innerX + colLabelW + 4,
-          notesLine1Y,
+          notesStartY + notesLineH * 0.5,
           innerW - colLabelW - 10,
-          notesLineHeight,
-          notesFontSize,
+          notesLineH,
+          Math.max(9, Math.round(notesLineH * 0.44)),
           textMain
         );
 
+        // 下部エリア：施工会社 & 撮影日
         const botStartY = innerY + innerH - bottomH;
         ctx.beginPath();
         ctx.moveTo(innerX, botStartY);
@@ -411,7 +492,6 @@
         const botCenterY = botStartY + bottomH / 2;
         drawFittedText(ctx, blackboard.constractor || '', innerX + 10, botCenterY, innerW * 0.60, Math.round(bottomH * 0.42), textMain, 'left');
         
-        // 黒板上の日付表示（システム自動日付 YYYY.MM.DD）
         const displayDate = (blackboard.date || getSystemDateYmd()).replace(/-/g, '.');
         drawFittedText(ctx, displayDate, innerX + innerW - 10, botCenterY, innerW * 0.35, Math.round(bottomH * 0.42), textMain, 'right');
 
@@ -511,14 +591,13 @@
         };
 
         // 案件ごとのストレージキーに直近15枚を上限として安全に保持（容量圧迫防止）
-        const key = getStorageKey(urlConfig.projectCode);
+        const key = getHistoryStorageKey(urlConfig.projectCode);
         const updated = [photoRecord, ...recentPhotos].slice(0, 15);
         setRecentPhotos(updated);
         try {
           localStorage.setItem(key, JSON.stringify(updated));
         } catch(e) {
           try {
-            // 容量上限時のフォールバック（直近5枚に絞る）
             const trimmed = [photoRecord, ...recentPhotos].slice(0, 5);
             localStorage.setItem(key, JSON.stringify(trimmed));
             setRecentPhotos(trimmed);
@@ -569,7 +648,7 @@
       // 端末履歴の手動消去
       const handleClearHistory = () => {
         if (confirm("この端末に一時保存されている撮影履歴を消去しますか？\n※kintoneに送信済みの写真は消えません。")) {
-          const key = getStorageKey(urlConfig.projectCode);
+          const key = getHistoryStorageKey(urlConfig.projectCode);
           try {
             localStorage.removeItem(key);
           } catch(e) {}
@@ -624,7 +703,12 @@
             {activeTab === 'board' && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-4 text-xs">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span className="font-bold text-slate-200 text-sm">黒板項目設定</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-200 text-sm">黒板項目設定</span>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/50">
+                      自動保存
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setActiveTab('camera')}
@@ -704,11 +788,15 @@
                     />
                   </div>
 
+                  {/* 特記事項（3行入力対応） */}
                   <div>
-                    <label className="text-slate-400 block text-[11px] mb-1">特記事項</label>
+                    <div className="flex justify-between items-baseline mb-1">
+                      <label className="text-slate-400 text-[11px]">特記事項 (黒板3行表示)</label>
+                      <span className="text-[10px] text-slate-500">改行で3行まで反映</span>
+                    </div>
                     <textarea
-                      rows={2}
-                      placeholder="寸法・実測値・品質確認事項 (改行で2行表示)"
+                      rows={3}
+                      placeholder="寸法・実測値・品質確認事項 (改行で3行まで表示)"
                       value={blackboard.specAndNotes}
                       onChange={(e) => setBlackboard({ ...blackboard, specAndNotes: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white resize-none text-xs leading-relaxed outline-none"
