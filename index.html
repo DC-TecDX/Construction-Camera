@@ -38,12 +38,16 @@
     ];
 
     const STAGE_OPTIONS = [
-      { id: '施工前', label: '施工前' },
-      { id: '施工中', label: '施工中' },
-      { id: '施工完了', label: '施工完了' },
-      { id: '材料・機材', label: '材料確認' },
-      { id: '自主検査', label: '自主検査' },
-      { id: '産業廃棄物', label: '発生材' }
+      { id: '着手前 全景', label: '着手前 全景' },
+      { id: '着手前 部分', label: '着手前 部分' },
+      { id: '仮設工事', label: '仮設工事' },
+      { id: '産業廃棄物', label: '産業廃棄物' },
+      { id: '安全・環境対策', label: '安全・環境対策' },
+      { id: '材料・使用機材', label: '材料・使用機材' },
+      { id: 'その他', label: 'その他' },
+      { id: '整備・施工状況', label: '整備・施工状況' },
+      { id: '完了 全景', label: '完了 全景' },
+      { id: '完了 部分', label: '完了 部分' }
     ];
 
     // JSTシステム日付 (YYYY-MM-DD)
@@ -99,7 +103,7 @@
           workType29: '13. 舗装工事',
           workDetail: '舗装打換え工',
           location: '西側歩道 A区画',
-          stage: '施工中',
+          stage: '整備・施工状況',
           stageDetail: '路盤整正',
           specAndNotes: 'アスファルト舗装 t=50mm\n路面クラック修繕確認\n規定密度転圧完了',
           constractor: '施工会社',
@@ -780,13 +784,17 @@
 
                   <div>
                     <label className="text-slate-400 block text-[11px] mb-1">施工状況</label>
-                    <div className="grid grid-cols-3 gap-1 mb-2">
+                    <div className="grid grid-cols-2 gap-1.5 mb-2">
                       {STAGE_OPTIONS.map(st => (
                         <button
                           key={st.id}
                           type="button"
                           onClick={() => setBlackboard({ ...blackboard, stage: st.id })}
-                          className={`py-1.5 rounded-lg text-xs font-medium transition ${blackboard.stage === st.id ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-950 text-slate-300'}`}
+                          className={`py-2 px-2 rounded-lg text-[11px] font-medium transition text-center truncate ${
+                            blackboard.stage === st.id 
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' 
+                              : 'bg-slate-950 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                          }`}
                         >
                           {st.label}
                         </button>
