@@ -624,17 +624,24 @@
               }
             };
 
-            await fetch(urlConfig.gasUrl, {
+            const response = await fetch(urlConfig.gasUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain' },
-              body: JSON.stringify(payload),
-              mode: 'no-cors'
+              body: JSON.stringify(payload)
             });
 
-            setIsUploading(false);
-            setPendingPhoto(null);
-            setUploadSuccessAlert('kintoneへ送信完了しました');
-            setTimeout(() => setUploadSuccessAlert(null), 3000);
+            const data = await response.json();
+
+            if (data.status === 'success' && data.result && data.result.status === 'success') {
+              setIsUploading(false);
+              setPendingPhoto(null);
+              setUploadSuccessAlert('kintoneへ送信完了しました');
+              setTimeout(() => setUploadSuccessAlert(null), 3000);
+            } else {
+              setIsUploading(false);
+              const errMsg = (data.result && data.result.message) || data.message || '保存に失敗しました';
+              alert('kintone保存エラー:\n' + errMsg);
+            }
           } catch(err) {
             setIsUploading(false);
             alert('送信エラー: ' + err.message);
