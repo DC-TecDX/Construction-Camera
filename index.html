@@ -59,7 +59,7 @@
       return `${y}-${m}-${d}`;
     };
 
-    // 工事コードごとのストレージキー（案件ごとに履歴および黒板設定を完全分離）
+    // 工事コードごとのストレージキー
     const getHistoryStorageKey = (pCode) => {
       return pCode ? `FIELD_PHOTO_HISTORY_${pCode}` : 'FIELD_PHOTO_HISTORY_DEFAULT';
     };
@@ -69,6 +69,47 @@
     };
 
     const PREFS_STORAGE_KEY = 'FIELD_CAMERA_PREFERENCES';
+    const TIPS_DISMISSED_KEY = 'FIELD_PHOTO_TIPS_DISMISSED';
+
+    // 撮影の心得・ポイントの定義データ
+    const SHOOTING_TIPS = [
+      {
+        icon: "⏮️",
+        tag: "不可逆箇所の記録",
+        title: "「施工前」がすべての起点",
+        desc: "完成後には見えなくなる部分（下地・配管・基礎など）は、隠れる前に必ず撮影！すべての施工箇所で原則「着工前の姿」が必要です。"
+      },
+      {
+        icon: "📐",
+        tag: "定点比較の原則",
+        title: "「同じ位置・同じアングル」で比較",
+        desc: "「施工前」と「施工完了」は必ず同じ位置・角度から撮影してください。アングルがズレると適切な施工の証明が難しくなります。"
+      },
+      {
+        icon: "🔍",
+        tag: "鮮読性の確保",
+        title: "文字・数字・規格は鮮明に",
+        desc: "黒板の記入ミスに注意。材料の規格（品番・JISマーク）や測定機器の数値は、拡大してピントを合わせ確実に読める状態で写し込んでください。"
+      },
+      {
+        icon: "📝",
+        tag: "現場エビデンス",
+        title: "現場の異常・気づきは黒板に書く",
+        desc: "「舗装下に空洞あり」「既設管に腐食」など、図面にない異常を発見した際は黒板の特記事項に書き込み、状況写真とともに記録してください。"
+      },
+      {
+        icon: "⛑️",
+        tag: "品質と安全",
+        title: "安全への配慮も品質の証明",
+        desc: "ノーヘルなどの服装不備や、不安全な体勢・行動の作業員が写真内に写り込まないよう、周囲の状況にも配慮して撮影してください。"
+      },
+      {
+        icon: "🔄",
+        tag: "その場で確認",
+        title: "撮り直しは現場でしかできない",
+        desc: "撮影直後のプレビューで、手ブレやピンボケがないか必ず確認！不鮮明な写真は証拠価値を失ってしまいます。"
+      }
+    ];
 
     function MobileCameraApp() {
       const [activeTab, setActiveTab] = useState('board');
@@ -77,6 +118,10 @@
       const [facingMode, setFacingMode] = useState('environment');
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
+
+      // 撮影心得モーダルの開閉ステート
+      const [showTipsModal, setShowTipsModal] = useState(false);
+      const [dontShowTipsAgain, setDontShowTipsAgain] = useState(false);
 
       // 撮影向き設定（永続化）
       const [photoOrientation, setPhotoOrientation] = useState(() => {
@@ -133,7 +178,7 @@
       // 履歴一覧からタップした写真の詳細確認モーダル用
       const [selectedPhotoModal, setSelectedPhotoModal] = useState(null);
 
-      // ★新機能: 撮影直後の確認プレビュー用の一時写真データ（撮り直し or 送信選択用）
+      // 撮影直後の確認プレビュー用の一時写真データ（撮り直し or 送信選択用）
       const [pendingPhoto, setPendingPhoto] = useState(null);
 
       const videoRef = useRef(null);
@@ -150,6 +195,12 @@
           const projectCode = p.get('projectCode') || '';
 
           setUrlConfig({ gasUrl, recordId, projectCode });
+
+          // 初回訪問チェック：まだ心得を非表示にしていない場合は自動で心得モーダルを開く
+          const dismissed = localStorage.getItem(TIPS_DISMISSED_KEY);
+          if (!dismissed) {
+            setShowTipsModal(true);
+          }
 
           // 1. 案件専用履歴の読み込み
           const hKey = getHistoryStorageKey(projectCode);
@@ -228,6 +279,15 @@
           localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(prefs));
         } catch (e) {}
       }, [blackboard, photoOrientation, urlConfig.projectCode]);
+
+      const handleCloseTipsModal = () => {
+        if (dontShowTipsAgain) {
+          try {
+            localStorage.setItem(TIPS_DISMISSED_KEY, 'true');
+          } catch (e) {}
+        }
+        setShowTipsModal(false);
+      };
 
       const startCamera = async (targetFacing = facingMode) => {
         setStreamError(null);
@@ -560,7 +620,7 @@
         };
       }, [isStreaming, facingMode, photoOrientation, renderBlackboard]);
 
-      // シャッター押下：即時送信せず、プレビュー確認画面（撮り直し or 送信）を表示
+      // シャッター押下：プレビュー確認画面（撮り直し or 送信）を表示
       const handleShutter = () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -584,7 +644,6 @@
           capturedAt: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
         };
 
-        // プレビュー確認状態へセット（kintone未送信状態）
         setPendingPhoto(photoRecord);
       };
 
@@ -657,12 +716,10 @@
         }
       };
 
-      // プレビュー確認後の「撮り直し」実行処理
       const handleRetake = () => {
         setPendingPhoto(null);
       };
 
-      // 端末履歴の手動消去
       const handleClearHistory = () => {
         if (confirm("この端末に一時保存されている撮影履歴を消去しますか？\n※kintoneに送信済みの写真は消えません。")) {
           const key = getHistoryStorageKey(urlConfig.projectCode);
@@ -676,16 +733,27 @@
       return (
         <div className="max-w-md mx-auto min-h-screen bg-slate-950 flex flex-col justify-between pb-6 font-sans">
           
+          {/* ヘッダーエリア */}
           <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-emerald-500' : 'bg-slate-500'}`}></span>
               <span className="text-xs font-bold text-white tracking-wide">電子黒板カメラ</span>
+              {urlConfig.projectCode && (
+                <span className="text-[10px] font-mono text-amber-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700 truncate max-w-[110px]">
+                  {urlConfig.projectCode}
+                </span>
+              )}
             </div>
-            {urlConfig.projectCode && (
-              <span className="text-[11px] font-mono text-amber-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-                {urlConfig.projectCode}
-              </span>
-            )}
+
+            {/* ★撮影のコツ（心得）を開くボタン */}
+            <button
+              type="button"
+              onClick={() => setShowTipsModal(true)}
+              className="flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 text-amber-300 border border-amber-500/40 px-2.5 py-1 rounded-lg text-xs font-bold transition shadow-sm"
+            >
+              <span>💡</span>
+              <span>撮影のコツ</span>
+            </button>
           </header>
 
           <div className="bg-slate-900 border-b border-slate-800 px-3 py-1.5 flex items-center justify-around text-xs font-medium">
@@ -1060,10 +1128,84 @@
 
           </main>
 
-          {/* ★新機能: 撮影直後の確認プレビューモーダル（撮り直し or kintone送信） */}
+          {/* ★新機能: 撮影のコツ（手戻り防止心得）モーダル */}
+          {showTipsModal && (
+            <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-between p-4 overflow-y-auto">
+              <div className="max-w-md w-full mx-auto bg-slate-900 border border-slate-700/80 rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto max-h-[92vh]">
+                
+                {/* モーダルヘッダー */}
+                <div className="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">💡</span>
+                    <div>
+                      <h3 className="text-xs font-bold text-white tracking-wide">撮影のコツ・チェック事項</h3>
+                      <p className="text-[10px] text-amber-300">手戻り（撮り直し）ゼロのための重要ポイント</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseTipsModal}
+                    className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-white rounded-lg bg-slate-700/60 text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* 心得カードリスト（スクロールエリア） */}
+                <div className="p-3.5 space-y-2.5 overflow-y-auto flex-1 text-xs">
+                  <div className="bg-amber-950/40 border border-amber-600/40 rounded-xl p-2.5 text-[11px] text-amber-200 leading-relaxed">
+                    現場写真はお客様への提出物であると同時に、<strong className="text-amber-300 underline underline-offset-2">「適切な施工の証明」として現場と会社を守る重要な証拠（エビデンス）</strong>です。
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    {SHOOTING_TIPS.map((tip, idx) => (
+                      <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-200 text-xs">
+                            <span>{tip.icon}</span>
+                            <span>{tip.title}</span>
+                          </div>
+                          <span className="text-[9px] font-medium bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
+                            {tip.tag}
+                          </span>
+                        </div>
+                        <p className="text-slate-300 text-[11px] leading-relaxed pl-5">
+                          {tip.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* モーダルフッター */}
+                <div className="bg-slate-950 border-t border-slate-800 p-3.5 space-y-2 shrink-0">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-slate-400 px-1">
+                    <input
+                      type="checkbox"
+                      checked={dontShowTipsAgain}
+                      onChange={(e) => setDontShowTipsAgain(e.target.checked)}
+                      className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 w-3.5 h-3.5"
+                    />
+                    <span>次回から自動表示しない（上部の💡ボタンでいつでも確認可能）</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={handleCloseTipsModal}
+                    className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition shadow-md shadow-amber-500/20"
+                  >
+                    確認して撮影へ進む
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* 撮影直後の確認プレビューモーダル（撮り直し or kintone送信） */}
           {pendingPhoto && (
             <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col justify-between p-3.5 overflow-y-auto">
-              <div className="max-w-md w-full mx-auto flex flex-col justify-between h-full space-y-3">
+              <div className="max-w-md w-full mx-auto flex flex-col justify-between h-full space-y-2.5">
                 
                 {/* プレビュー上部ヘッダー */}
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -1079,9 +1221,15 @@
                   </span>
                 </div>
 
+                {/* ★手戻り防止ワンポイントリマインド */}
+                <div className="bg-slate-900/90 border border-amber-500/30 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] text-amber-300">
+                  <span>💡</span>
+                  <span>手ブレ・ピンボケはありませんか？撮り直しは現場でしかできません。</span>
+                </div>
+
                 {/* 撮影画像プレビュー表示 */}
                 <div className="w-full flex-1 flex items-center justify-center min-h-0 py-1">
-                  <div className={`w-full max-h-[58vh] bg-black rounded-xl overflow-hidden border border-slate-700 shadow-2xl flex items-center justify-center ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
+                  <div className={`w-full max-h-[55vh] bg-black rounded-xl overflow-hidden border border-slate-700 shadow-2xl flex items-center justify-center ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
                     <img
                       src={pendingPhoto.url}
                       alt="撮影プレビュー"
@@ -1091,7 +1239,7 @@
                 </div>
 
                 {/* 撮影情報の簡易サマリー */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs space-y-1.5">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs space-y-1">
                   <div className="flex justify-between items-center text-[11px]">
                     <span className="text-slate-400">工種 / 作業種目:</span>
                     <span className="text-slate-200 font-medium truncate max-w-[220px]">{pendingPhoto.workCategory || '-'}</span>
