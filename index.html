@@ -34,7 +34,7 @@
       "17. 塗装工事", "18. 防水工事", "19. 内装仕上工事", "20. 機械器具設置工事",
       "21. 熱絶縁工事", "22. 電気通信工事", "23. 造園工事", "24. さく井工事",
       "25. 建具工事", "26. 水道施設工事", "27. 消防施設工事", "28. 清掃施設工事",
-      "29. 解体工事", "その他"
+      "29. 解体工事", "保全" ,  "点検" , "整備" , "修繕" , "現場調査" ,   "その他"
     ];
 
     const STAGE_OPTIONS = [
@@ -816,7 +816,7 @@
 
                   <div className="space-y-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
                     <div>
-                      <label className="text-slate-400 block text-[11px] mb-1">工種：建設業</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">作業種目</label>
                       <select
                         value={blackboard.workType29}
                         onChange={(e) => setBlackboard({ ...blackboard, workType29: e.target.value })}
