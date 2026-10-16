@@ -880,12 +880,12 @@
                   {/* 特記事項（3行入力対応） */}
                   <div>
                     <div className="flex justify-between items-baseline mb-1">
-                      <label className="text-slate-400 text-[11px]">特記事項 (黒板3行表示)</label>
+                      <label className="text-slate-400 text-[11px]">特記事項 (施工詳細説明)</label>
                       <span className="text-[10px] text-slate-500">改行で3行まで反映</span>
                     </div>
                     <textarea
                       rows={3}
-                      placeholder="寸法・実測値・品質確認事項 (改行で3行まで表示)"
+                      placeholder="寸法・実測値・品質確認事項 (3行まで表示)"
                       value={blackboard.specAndNotes}
                       onChange={(e) => setBlackboard({ ...blackboard, specAndNotes: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white resize-none text-xs leading-relaxed outline-none"
