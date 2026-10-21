@@ -143,10 +143,12 @@
     const STAGE_OPTIONS = [
       { id: '着手前 全景', label: '着手前 全景' },
       { id: '着手前 部分', label: '着手前 部分' },
-      { id: '材料・機器搬入時', label: '材料・搬入時' },
-      { id: '施工中', label: '施工中' },
-      { id: '検査・試験中', label: '検査・試験中' },
+      { id: '仮設工事', label: '仮設工事' },
+      { id: '産業廃棄物', label: '産業廃棄物' },
       { id: '安全・環境対策', label: '安全・環境対策' },
+      { id: '材料・使用機材', label: '材料・使用機材' },
+      { id: '整備・施工中', label: '整備・施工中' },
+      { id: '検査・試験中', label: '検査・試験中' },
       { id: '完了 全景', label: '完了 全景' },
       { id: '完了 部分', label: '完了 部分' },
       { id: 'その他', label: 'その他' }
@@ -1050,7 +1052,7 @@
                             value=""
                             className="w-full bg-slate-900/90 border border-amber-500/40 text-amber-300 rounded-lg p-2 text-xs outline-none cursor-pointer mb-1"
                           >
-                            <option value="">▼ PDF規準の撮影対象から選ぶ（タップで自動入力）</option>
+                            <option value="">▼ 撮影対象を選択（工事種目 連動）</option>
                             {(PDF_TARGET_PRESETS[blackboard.workType29] || []).map((targetText, idx) => (
                               <option key={idx} value={targetText} className="bg-slate-900 text-slate-200">
                                 {targetText}
@@ -1102,7 +1104,7 @@
                     </div>
                     <input
                       type="text"
-                      placeholder="詳細状況 (例: 路盤整正・転圧中)"
+                      placeholder="施工状況 説明 (例: 路盤整正・転圧中)"
                       value={blackboard.stageDetail}
                       onChange={(e) => setBlackboard({ ...blackboard, stageDetail: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none"
@@ -1113,11 +1115,11 @@
                   <div>
                     <div className="flex justify-between items-baseline mb-1">
                       <label className="text-slate-400 text-[11px]">特記事項 (施工詳細説明)</label>
-                      <span className="text-[10px] text-slate-500">改行で3行まで反映</span>
+                      <span className="text-[10px] text-slate-500">改行3行まで表示</span>
                     </div>
                     <textarea
                       rows={3}
-                      placeholder="寸法・実測値・品質確認事項 (3行まで表示)"
+                      placeholder="寸法や実測値、品質確認事項などの詳細説明"
                       value={blackboard.specAndNotes}
                       onChange={(e) => setBlackboard({ ...blackboard, specAndNotes: e.target.value })}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white resize-none text-xs leading-relaxed outline-none"
@@ -1136,10 +1138,10 @@
                 </div>
 
                 <div className="pt-3 border-t border-slate-800 space-y-3">
-                  <span className="font-bold text-slate-300 block text-xs">表示設定</span>
+                  <span className="font-bold text-slate-300 block text-xs">黒板表示設定</span>
                   
                   <div>
-                    <label className="text-slate-400 block text-[11px] mb-1">配色</label>
+                    <label className="text-slate-400 block text-[11px] mb-1">デザイン背景色</label>
                     <div className="grid grid-cols-3 gap-1 text-xs">
                       <button
                         type="button"
@@ -1194,7 +1196,7 @@
 
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                     <div>
-                      <label className="text-slate-400 block text-[11px] mb-1">位置</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">配置位置（右下/左下/右上/左上）</label>
                       <select
                         value={blackboard.position}
                         onChange={(e) => setBlackboard({ ...blackboard, position: e.target.value })}
