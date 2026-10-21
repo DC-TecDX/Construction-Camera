@@ -628,6 +628,7 @@
 
         const colLabelW = Math.round(innerW * 0.23);
 
+        // 1行目の横線
         ctx.strokeStyle = lineCol;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -635,19 +636,30 @@
         ctx.lineTo(innerX + innerW, innerY + row1H);
         ctx.stroke();
 
+        // 1・2行目の縦区切り線
+        ctx.beginPath();
+        ctx.moveTo(innerX + colLabelW, innerY);
+        ctx.lineTo(innerX + colLabelW, innerY + row1H * 2);
+        ctx.stroke();
+
+        // ★ 1行目: 工事名（復元）
+        drawFittedText(ctx, "工事名", innerX + colLabelW / 2, innerY + row1H / 2, colLabelW - 6, Math.round(row1H * 0.40), textMain, 'center');
+        drawFittedText(ctx, blackboard.projectName || '', innerX + colLabelW + 8, innerY + row1H / 2, innerW - colLabelW - 14, Math.round(row1H * 0.40), textSub, 'left');
+
+        // 2行目の横線
         ctx.beginPath();
         ctx.moveTo(innerX, innerY + row1H + row2H);
         ctx.lineTo(innerX + innerW, innerY + row1H + row2H);
         ctx.stroke();
 
-        // ★「〇〇編」は黒板に印字せず、「工事種目」と「自由記入した中項目」のみを表示
+        // ★ 2行目: 工種（変数名 fullCategory に正しく統一）
         const cleanType = (blackboard.workType29 || '').replace(/^\d+\.\s*/, '');
         const fullCategory = blackboard.workDetail 
           ? `${cleanType} / ${blackboard.workDetail}` 
           : cleanType;
 
         drawFittedText(ctx, "工 種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
-        drawFittedText(ctx, fullWorkCategory, innerX + colLabelW + 8, innerY + row1H + row2H / 2, innerW - colLabelW - 14, Math.round(row2H * 0.40), textMain, 'left');
+        drawFittedText(ctx, fullCategory, innerX + colLabelW + 8, innerY + row1H + row2H / 2, innerW - colLabelW - 14, Math.round(row2H * 0.40), textMain, 'left');
 
         // 中間部（撮影部位、施工状況、特記事項）
         const midStartY = innerY + row1H + row2H;
@@ -664,10 +676,10 @@
         // 施工状況
         const stgY = midStartY + locH + stgH * 0.5;
         drawFittedText(ctx, "施工状況:", innerX + 8, stgY, colLabelW - 6, Math.round(stgH * 0.44), textMain, 'left');
-        const stageText = `${blackboard.stage}${blackboard.stageDetail ? ' (' + blackboard.stageDetail + ')' : ''}`;
+        const stageText = `${blackboard.stage || '施工中'}${blackboard.stageDetail ? ' (' + blackboard.stageDetail + ')' : ''}`;
         drawFittedText(ctx, stageText, innerX + colLabelW + 4, stgY, innerW - colLabelW - 10, Math.round(stgH * 0.44), textSub, 'left');
 
-        // 寸法・規格・特記事項
+        // 特記事項
         const notesStartY = midStartY + locH + stgH;
         const notesLabelY = notesStartY + notesLineH * 0.5;
         drawFittedText(ctx, "特記事項:", innerX + 8, notesLabelY, colLabelW - 6, Math.round(notesLineH * 0.44), textMain, 'left');
@@ -683,7 +695,7 @@
           textMain
         );
 
-        // 最下部: 施工会社（受注者名）＋ 日付（※撮影者・立会者氏名は表示しない）
+        // 最下部: 施工会社（受注者名）＋ 日付（氏名は除外）
         const botStartY = innerY + innerH - bottomH;
         ctx.beginPath();
         ctx.moveTo(innerX, botStartY);
@@ -691,11 +703,9 @@
         ctx.stroke();
 
         const botCenterY = botStartY + bottomH / 2;
-        // 会社名のみ印字
         drawFittedText(ctx, blackboard.constractor || '', innerX + 10, botCenterY, innerW * 0.60, Math.round(bottomH * 0.42), textMain, 'left');
 
-        // 日付
-        const displayDate = (blackboard.date || getSystemDateYmd()).replace(/-/g, '-');
+        const displayDate = (blackboard.date || getSystemDateYmd()).replace(/-/g, '.');
         drawFittedText(ctx, displayDate, innerX + innerW - 10, botCenterY, innerW * 0.35, Math.round(bottomH * 0.42), textMain, 'right');
 
         ctx.restore();
@@ -781,7 +791,10 @@
         if (!canvas) return;
 
         const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-        const fullCategory = `${blackboard.workType29.replace(/^\d+\.\s*/, '')} / ${blackboard.workDetail}`;
+        const cleanType = (blackboard.workType29 || '').replace(/^\d+\.\s*/, '');
+        const fullCategory = blackboard.workDetail 
+          ? `${cleanType} / ${blackboard.workDetail}` 
+          : cleanType;
         const shootingDateYmd = getSystemDateYmd();
 
         const photoRecord = {
