@@ -658,7 +658,7 @@
           ? `${cleanType} / ${blackboard.workDetail}` 
           : cleanType;
 
-        drawFittedText(ctx, "工 種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
+        drawFittedText(ctx, "工   種", innerX + colLabelW / 2, innerY + row1H + row2H / 2, colLabelW - 6, Math.round(row2H * 0.40), textMain, 'center');
         drawFittedText(ctx, fullCategory, innerX + colLabelW + 8, innerY + row1H + row2H / 2, innerW - colLabelW - 14, Math.round(row2H * 0.40), textMain, 'left');
 
         // 中間部（撮影部位、施工状況、特記事項）
@@ -983,11 +983,11 @@
                   </div>
 
                   <div className="space-y-2.5 bg-slate-950 p-3 rounded-xl border border-slate-800">
-  
+                    <label className="text-slate-400 block text-[11px] mb-1">工種</label>
                     {/* ① 分類（〇〇編）の選択（黒板には印字されません） */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 block text-[11px]">分類（〇〇編）の選択</label>
+                        <label className="text-slate-400 block text-[11px]">分類選択</label>
                         <span className="text-[10px] text-amber-400/90 font-medium">※黒板には印字されません</span>
                       </div>
                       <select
@@ -1013,7 +1013,7 @@
 
                     {/* ② 絞り込まれた工事種目（大項目）の選択 */}
                     <div>
-                      <label className="text-slate-400 block text-[11px] mb-1">工事種目（大項目）</label>
+                      <label className="text-slate-400 block text-[11px] mb-1">工事種目</label>
                       <select
                         value={blackboard.workType29}
                         onChange={(e) => setBlackboard({ 
@@ -1032,10 +1032,10 @@
                     {/* ③ 中項目（撮影対象）：PDF候補選択 ＋ 自由記入・編集 */}
                     <div className="space-y-1 pt-1 border-t border-slate-900">
                       <div className="flex items-center justify-between">
-                        <label className="text-slate-300 text-[11px] font-bold">
-                          中項目／撮影対象（自由記入・編集可）
+                        <label className="text-slate-400 block text-[11px] mb-1">
+                          撮影対象
                         </label>
-                        <span className="text-[10px] text-amber-400">候補から選択 ＆ 直接編集OK</span>
+                        <span className="text-[10px] text-amber-400">※選択/編集可</span>
                       </div>
 
                       {/* PDF撮影対象の候補プルダウン（選択すると下のテキスト欄に一発入力） */}
