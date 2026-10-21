@@ -981,93 +981,94 @@
                     />
                   </div>
 
-                  <label className="text-slate-400 block text-[11px] mb-1">工事種目 / 撮影対象</label>
-                  <div className="space-y-2.5 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                    
-                    {/* ① 分類（〇〇編）の選択（黒板には印字されません） */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 block text-[11px]">分類選択</label>
-                        <span className="text-[10px] text-amber-400/90 font-medium">※黒板には印字されません</span>
-                      </div>
-                      <select
-                        value={blackboard.section || '建築工事編'}
-                        onChange={(e) => {
-                          const selectedSec = e.target.value;
-                          const subList = SECTION_CATEGORY_MAP[selectedSec] || [];
-                          const defaultWork = subList[0] || 'その他';
-                          setBlackboard({
-                            ...blackboard,
-                            section: selectedSec,
-                            workType29: defaultWork,
-                            workDetail: '' // 種目が変わったら中項目をクリア
-                          });
-                        }}
-                        className="w-full bg-slate-900 border border-slate-800 text-amber-300 font-bold rounded-lg p-2 text-xs outline-none"
-                      >
-                        {Object.keys(SECTION_CATEGORY_MAP).map((sec) => (
-                          <option key={sec} value={sec}>{sec}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* ② 絞り込まれた工事種目（大項目）の選択 */}
-                    <div>
-                      <label className="text-slate-400 block text-[11px] mb-1">工事種目</label>
-                      <select
-                        value={blackboard.workType29}
-                        onChange={(e) => setBlackboard({ 
-                          ...blackboard, 
-                          workType29: e.target.value,
-                          workDetail: '' // 種目が変わったら中項目をクリア
-                        })}
-                        className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg p-2 text-xs outline-none"
-                      >
-                        {(SECTION_CATEGORY_MAP[blackboard.section || '建築工事編'] || []).map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* ③ 中項目（撮影対象）：PDF候補選択 ＋ 自由記入・編集 */}
-                    <div className="space-y-1 pt-1 border-t border-slate-900">
-                      <div className="flex items-center justify-between">
-                        <label className="text-slate-400 block text-[11px] mb-1">
-                          撮影対象
-                        </label>
-                        <span className="text-[10px] text-amber-400">※選択/編集可</span>
-                      </div>
-
-                      {/* PDF撮影対象の候補プルダウン（選択すると下のテキスト欄に一発入力） */}
-                      {(PDF_TARGET_PRESETS[blackboard.workType29] || []).length > 0 && (
+                  {/* ★ <div> でひとまとめにグループ化 */}
+                  <div>
+                    <label className="text-slate-400 block text-[11px] mb-1">工事種目 / 撮影対象</label>
+                    <div className="space-y-2.5 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                      
+                      {/* ① 分類（〇〇編）の選択（黒板には印字されません） */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-slate-400 block text-[11px]">分類選択</label>
+                          <span className="text-[10px] text-amber-400/90 font-medium">※黒板には印字されません</span>
+                        </div>
                         <select
+                          value={blackboard.section || '建築工事編'}
                           onChange={(e) => {
-                            if (e.target.value) {
-                              setBlackboard({ ...blackboard, workDetail: e.target.value });
-                            }
+                            const selectedSec = e.target.value;
+                            const subList = SECTION_CATEGORY_MAP[selectedSec] || [];
+                            const defaultWork = subList[0] || 'その他';
+                            setBlackboard({
+                              ...blackboard,
+                              section: selectedSec,
+                              workType29: defaultWork,
+                              workDetail: ''
+                            });
                           }}
-                          value=""
-                          className="w-full bg-slate-900/90 border border-amber-500/40 text-amber-300 rounded-lg p-2 text-xs outline-none cursor-pointer mb-1"
+                          className="w-full bg-slate-900 border border-slate-800 text-amber-300 font-bold rounded-lg p-2 text-xs outline-none"
                         >
-                          <option value="">▼ PDF規準の撮影対象から選ぶ（タップで自動入力）</option>
-                          {(PDF_TARGET_PRESETS[blackboard.workType29] || []).map((targetText, idx) => (
-                            <option key={idx} value={targetText} className="bg-slate-900 text-slate-200">
-                              {targetText}
-                            </option>
+                          {Object.keys(SECTION_CATEGORY_MAP).map((sec) => (
+                            <option key={sec} value={sec}>{sec}</option>
                           ))}
                         </select>
-                      )}
+                      </div>
 
-                      {/* 中項目（撮影対象）自由記入テキストボックス */}
-                      <input
-                        type="text"
-                        placeholder="撮影対象を入力（例: 配管のふ設状況、型枠組立、受入検査 など）"
-                        value={blackboard.workDetail}
-                        onChange={(e) => setBlackboard({ ...blackboard, workDetail: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-lg p-2 text-white text-xs outline-none"
-                      />
+                      {/* ② 絞り込まれた工事種目（大項目）の選択 */}
+                      <div>
+                        <label className="text-slate-400 block text-[11px] mb-1">工事種目</label>
+                        <select
+                          value={blackboard.workType29}
+                          onChange={(e) => setBlackboard({ 
+                            ...blackboard, 
+                            workType29: e.target.value,
+                            workDetail: ''
+                          })}
+                          className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg p-2 text-xs outline-none"
+                        >
+                          {(SECTION_CATEGORY_MAP[blackboard.section || '建築工事編'] || []).map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* ③ 中項目（撮影対象）：PDF候補選択 ＋ 自由記入・編集 */}
+                      <div className="space-y-1 pt-1 border-t border-slate-900">
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-400 block text-[11px] mb-1">
+                            撮影対象
+                          </label>
+                          <span className="text-[10px] text-amber-400">※選択/編集可</span>
+                        </div>
+
+                        {(PDF_TARGET_PRESETS[blackboard.workType29] || []).length > 0 && (
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                setBlackboard({ ...blackboard, workDetail: e.target.value });
+                              }
+                            }}
+                            value=""
+                            className="w-full bg-slate-900/90 border border-amber-500/40 text-amber-300 rounded-lg p-2 text-xs outline-none cursor-pointer mb-1"
+                          >
+                            <option value="">▼ PDF規準の撮影対象から選ぶ（タップで自動入力）</option>
+                            {(PDF_TARGET_PRESETS[blackboard.workType29] || []).map((targetText, idx) => (
+                              <option key={idx} value={targetText} className="bg-slate-900 text-slate-200">
+                                {targetText}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        <input
+                          type="text"
+                          placeholder="撮影対象を入力（例: 配管のふ設状況、型枠組立、受入検査 など）"
+                          value={blackboard.workDetail}
+                          onChange={(e) => setBlackboard({ ...blackboard, workDetail: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 focus:border-amber-500 rounded-lg p-2 text-white text-xs outline-none"
+                        />
+                      </div>
+
                     </div>
-
                   </div>
 
                   <div>
