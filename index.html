@@ -71,43 +71,43 @@
     const PREFS_STORAGE_KEY = 'FIELD_CAMERA_PREFERENCES';
     const TIPS_DISMISSED_KEY = 'FIELD_PHOTO_TIPS_DISMISSED';
 
-    // 撮影の心得・ポイントの定義データ
+    // 撮影の心得・ポイントの定義データ（安全管理・隠ぺい部記録 強化版）
     const SHOOTING_TIPS = [
       {
+        icon: "⛑️",
+        tag: "安全管理・保護具の絶対遵守",
+        title: "作業時の保護具着用は現場の鉄則",
+        desc: "作業時はヘルメット（保護帽）・安全保護具の着用が絶対条件です。特に天井裏・ピット・機械室等の「隠ぺい部や狭小・高所」での作業時は必ず着用してください。安全ルールを徹底遵守した健全な施工現場であることを写真でも証明します。"
+      },
+      {
         icon: "⏮️",
-        tag: "不可逆箇所の記録",
+        tag: "不可逆・隠ぺい箇所の起点",
         title: "「施工前」がすべての起点",
-        desc: "完成後には見えなくなる部分（下地・配管・基礎など）は、隠れる前に必ず撮影！すべての施工箇所で原則「着工前の姿」が必要です。"
+        desc: "仕上がると塞がれて二度と見えなくなる隠ぺい部（配管・配線・下地・躯体など）は、塞ぐ前の状態を必ず撮影！すべての施工箇所で原則「着工前の姿」が必要です。"
       },
       {
         icon: "📐",
         tag: "定点比較の原則",
         title: "「同じ位置・同じアングル」で比較",
-        desc: "「施工前」と「施工完了」は必ず同じ位置・角度から撮影してください。アングルがズレると適切な施工の証明が難しくなります。"
+        desc: "「施工前」と「施工完了」は必ず同じ位置・角度から撮影してください。アングルがズレると適切な施工が行われたかの比較・証明が難しくなります。"
       },
       {
         icon: "🔍",
         tag: "鮮読性の確保",
-        title: "文字・数字・規格は鮮明に",
-        desc: "黒板の記入ミスに注意。材料の規格（品番・JISマーク）や測定機器の数値は、拡大してピントを合わせ確実に読める状態で写し込んでください。"
+        title: "文字・数字・規格は鮮明に写し込む",
+        desc: "黒板の記入ミスに注意。材料の規格（品番・JISマーク）や測定機器の数値は、拡大してピントを合わせ、確実に目盛りが読める状態で写し込んでください。"
       },
       {
         icon: "📝",
         tag: "現場エビデンス",
         title: "現場の異常・気づきは黒板に書く",
-        desc: "「舗装下に空洞あり」「既設管に腐食」など、図面にない異常を発見した際は黒板の特記事項に書き込み、状況写真とともに記録してください。"
-      },
-      {
-        icon: "⛑️",
-        tag: "品質と安全",
-        title: "安全への配慮も品質の証明",
-        desc: "ノーヘルなどの服装不備や、不安全な体勢・行動の作業員が写真内に写り込まないよう、周囲の状況にも配慮して撮影してください。"
+        desc: "「舗装下に空洞あり」「既設管に腐食」など、図面だけでは分からない現場の異常や特筆事項を発見した際は黒板に書き込み、状況写真とともに記録してください。"
       },
       {
         icon: "🔄",
         tag: "その場で確認",
         title: "撮り直しは現場でしかできない",
-        desc: "撮影直後のプレビューで、手ブレやピンボケがないか必ず確認！不鮮明な写真は証拠価値を失ってしまいます。"
+        desc: "撮影直後のプレビューで、手ブレやピンボケがないか必ず確認！撮り忘れや不鮮明な写真は、会社と現場を守る証拠価値を失ってしまいます。"
       }
     ];
 
@@ -118,6 +118,9 @@
       const [facingMode, setFacingMode] = useState('environment');
       const [isUploading, setIsUploading] = useState(false);
       const [uploadSuccessAlert, setUploadSuccessAlert] = useState(null);
+      const [isTorchOn, setIsTorchOn] = useState(false); // ライト点灯状態
+      const [zoomLevel, setZoomLevel] = useState(1.0); // ズーム倍率
+      const [showBoardControls, setShowBoardControls] = useState(false); // 撮影画面での黒板設定パネル開閉
 
       // 撮影心得モーダルの開閉ステート
       const [showTipsModal, setShowTipsModal] = useState(false);
@@ -353,7 +356,44 @@
         const next = facingMode === 'environment' ? 'user' : 'environment';
         setFacingMode(next);
       };
+      
+      // ライト（トーチ）点灯切替関数
+      const handleToggleTorch = async () => {
+        if (!streamRef.current) return;
+        const track = streamRef.current.getVideoTracks()[0];
+        if (!track) return;
+        try {
+          const nextState = !isTorchOn;
+          await track.applyConstraints({
+            advanced: [{ torch: nextState }]
+          });
+          setIsTorchOn(nextState);
+        } catch (e) {
+          alert("この端末・ブラウザはライト制御に対応していません");
+        }
+      };
 
+      // ズーム切替関数（1.0x -> 1.5x -> 2.0x -> 1.0x）
+      const handleCycleZoom = async () => {
+        const nextZoom = zoomLevel === 1.0 ? 1.5 : (zoomLevel === 1.5 ? 2.0 : 1.0);
+        setZoomLevel(nextZoom);
+
+        // ハードウェアズーム対応端末への適用
+        if (streamRef.current) {
+          const track = streamRef.current.getVideoTracks()[0];
+          if (track && track.getCapabilities) {
+            const caps = track.getCapabilities();
+            if (caps.zoom) {
+              try {
+                await track.applyConstraints({
+                  advanced: [{ zoom: nextZoom }]
+                });
+              } catch(err) {}
+            }
+          }
+        }
+      };
+      
       const drawFittedText = (ctx, text, x, y, maxWidth, baseFontSize, color, align = 'left') => {
         if (!text) return;
         ctx.save();
@@ -578,18 +618,25 @@
             const videoRatio = vw / vh;
             const canvasRatio = canvasW / canvasH;
 
-            let sx, sy, sWidth, sHeight;
+            // ズーム倍率を考慮した切り出し計算
+            const currentZoom = (typeof zoomLevelRef !== 'undefined' && zoomLevelRef.current)
+              ? zoomLevelRef.current
+              : (typeof zoomLevel !== 'undefined' ? zoomLevel : 1.0);
+
+            let baseWidth, baseHeight;
             if (videoRatio > canvasRatio) {
-              sHeight = vh;
-              sWidth = vh * canvasRatio;
-              sx = (vw - sWidth) / 2;
-              sy = 0;
+              baseHeight = vh;
+              baseWidth = vh * canvasRatio;
             } else {
-              sWidth = vw;
-              sHeight = vw / canvasRatio;
-              sx = 0;
-              sy = (vh - sHeight) / 2;
+              baseWidth = vw;
+              baseHeight = vw / canvasRatio;
             }
+
+            // ズーム倍率に合わせて切り出しサイズを中心から縮小（画面いっぱいに拡大）
+            const sWidth = baseWidth / currentZoom;
+            const sHeight = baseHeight / currentZoom;
+            const sx = (vw - sWidth) / 2;
+            const sy = (vh - sHeight) / 2;
 
             try {
               if (facingMode === 'user') {
@@ -618,7 +665,7 @@
         return () => {
           if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
         };
-      }, [isStreaming, facingMode, photoOrientation, renderBlackboard]);
+      }, [isStreaming, facingMode, photoOrientation, renderBlackboard, zoomLevel]);
 
       // シャッター押下：プレビュー確認画面（撮り直し or 送信）を表示
       const handleShutter = () => {
@@ -999,34 +1046,160 @@
               </div>
             )}
 
-            <div className={activeTab === 'camera' ? 'space-y-3' : 'hidden'}>
-              <div className="flex items-center justify-between px-1 text-xs">
-                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+            <div className={activeTab === 'camera' ? 'space-y-2' : 'hidden'}>
+              
+              {/* 撮影コントロール上部バー */}
+              <div className="flex items-center justify-between px-1 text-xs gap-1.5">
+                
+                {/* 縦横比率切替 */}
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 shrink-0">
                   <button
                     type="button"
                     onClick={() => setPhotoOrientation('landscape')}
-                    className={`px-3 py-1 rounded-lg transition text-xs ${photoOrientation === 'landscape' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
+                    className={`px-2.5 py-1 rounded-lg transition text-[11px] ${photoOrientation === 'landscape' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
                   >
-                    横 (4:3)
+                    横
                   </button>
                   <button
                     type="button"
                     onClick={() => setPhotoOrientation('portrait')}
-                    className={`px-3 py-1 rounded-lg transition text-xs ${photoOrientation === 'portrait' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
+                    className={`px-2.5 py-1 rounded-lg transition text-[11px] ${photoOrientation === 'portrait' ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400'}`}
                   >
-                    縦 (3:4)
+                    縦
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleToggleFacing}
-                  className="px-3 py-1.5 rounded-xl text-xs bg-slate-900 text-slate-300 border border-slate-700"
-                >
-                  カメラ反転
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {/* ★新機能: ズーム切替ボタン */}
+                  <button
+                    type="button"
+                    onClick={handleCycleZoom}
+                    className="px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-bold bg-slate-900 text-amber-300 border border-slate-700 active:scale-95 transition"
+                    title="倍率切替"
+                  >
+                    {zoomLevel.toFixed(1)}x
+                  </button>
+
+                  {/* ★新機能: ライト（トーチ）点灯ボタン */}
+                  <button
+                    type="button"
+                    onClick={handleToggleTorch}
+                    className={`px-2.5 py-1.5 rounded-xl text-[11px] border active:scale-95 transition flex items-center gap-1 ${
+                      isTorchOn 
+                        ? 'bg-amber-400 text-slate-950 font-bold border-amber-300 shadow-md shadow-amber-400/30' 
+                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                    }`}
+                    title="暗所用ライト"
+                  >
+                    <span>💡</span>
+                    <span>{isTorchOn ? '点灯中' : 'ライト'}</span>
+                  </button>
+
+                  {/* ★新機能: 黒板クイック調整トグルボタン */}
+                  <button
+                    type="button"
+                    onClick={() => setShowBoardControls(!showBoardControls)}
+                    className={`px-2.5 py-1.5 rounded-xl text-[11px] border active:scale-95 transition flex items-center gap-1 ${
+                      showBoardControls 
+                        ? 'bg-emerald-600 text-white font-bold border-emerald-400 shadow-md' 
+                        : 'bg-slate-900 text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    <span>📋</span>
+                    <span>黒板</span>
+                  </button>
+
+                  {/* カメラ反転ボタン */}
+                  <button
+                    type="button"
+                    onClick={handleToggleFacing}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-900 text-slate-300 border border-slate-700 active:scale-95 transition"
+                    title="カメラ反転"
+                  >
+                    🔄
+                  </button>
+                </div>
+
               </div>
 
+              {/* ★新機能: 撮影画面でその場で黒板を調整できるクイックパネル */}
+              {showBoardControls && (
+                <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-2xl p-3 space-y-2.5 text-xs shadow-xl animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="font-bold text-slate-200 text-[11px] flex items-center gap-1">
+                      <span>⚙️</span> 黒板表示のクイック調整
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowBoardControls(false)}
+                      className="text-slate-400 hover:text-white text-xs px-1"
+                    >
+                      ✕ 閉じる
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2">
+                    {/* 位置 */}
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">位置</label>
+                      <select
+                        value={blackboard.position}
+                        onChange={(e) => setBlackboard({ ...blackboard, position: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg p-1 text-[11px] outline-none"
+                      >
+                        <option value="bottom-right">右下</option>
+                        <option value="bottom-left">左下</option>
+                        <option value="top-right">右上</option>
+                        <option value="top-left">左上</option>
+                      </select>
+                    </div>
+
+                    {/* サイズ */}
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">サイズ</label>
+                      <select
+                        value={blackboard.scale}
+                        onChange={(e) => setBlackboard({ ...blackboard, scale: parseFloat(e.target.value) })}
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg p-1 text-[11px] outline-none"
+                      >
+                        <option value="0.38">小</option>
+                        <option value="0.44">中</option>
+                        <option value="0.50">大</option>
+                      </select>
+                    </div>
+
+                    {/* 配色 */}
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">配色</label>
+                      <select
+                        value={blackboard.theme}
+                        onChange={(e) => setBlackboard({ ...blackboard, theme: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg p-1 text-[11px] outline-none"
+                      >
+                        <option value="green">グリーン</option>
+                        <option value="black">ブラック</option>
+                        <option value="white">ホワイト</option>
+                      </select>
+                    </div>
+
+                    {/* 透明度 */}
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">透明度</label>
+                      <select
+                        value={blackboard.opacity}
+                        onChange={(e) => setBlackboard({ ...blackboard, opacity: parseFloat(e.target.value) })}
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg p-1 text-[11px] outline-none"
+                      >
+                        <option value="1.00">100%</option>
+                        <option value="0.75">75%</option>
+                        <option value="0.50">50%</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* カメラファインダー ＆ 黒板合成エリア */}
               <div className={`relative bg-black rounded-2xl overflow-hidden border border-slate-800 w-full flex items-center justify-center shadow-xl transition-all ${photoOrientation === 'landscape' ? 'aspect-[4/3]' : 'aspect-[3/4]'}`}>
                 <video
                   ref={videoRef}
@@ -1041,7 +1214,7 @@
                 {isStreaming && (
                   <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-700 text-[10px] text-slate-300">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>黒板合成中</span>
+                    <span>黒板合成中 ({zoomLevel.toFixed(1)}x)</span>
                   </div>
                 )}
 
@@ -1063,15 +1236,18 @@
                 )}
               </div>
 
-              <div className="pt-2">
+              {/* シャッターボタン */}
+              <div className="pt-1">
                 <button
                   type="button"
                   onClick={handleShutter}
-                  className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold py-3.5 rounded-2xl text-base shadow-lg transition-all border border-amber-300 cursor-pointer"
+                  className="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold py-3.5 rounded-2xl text-base shadow-lg transition-all border border-amber-300 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  撮影
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-950 bg-amber-200"></span>
+                  <span>撮影</span>
                 </button>
               </div>
+
             </div>
 
             {/* 撮影履歴タブ */}
